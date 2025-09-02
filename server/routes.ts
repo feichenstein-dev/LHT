@@ -10,11 +10,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Messages endpoints
   app.get("/api/messages", async (req, res) => {
     try {
+      console.log("Attempting to fetch messages...");
       const messages = await storage.getMessages();
+      console.log("Successfully fetched messages:", messages.length);
       res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);
-      res.status(500).json({ message: "Failed to fetch messages" });
+      res.status(500).json({ 
+        message: "Failed to fetch messages", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
     }
   });
 
