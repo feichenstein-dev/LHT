@@ -1,0 +1,82 @@
+import { Switch, Route } from "wouter";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import Messages from "@/pages/messages";
+import Logs from "@/pages/logs";
+import NotFound from "@/pages/not-found";
+import { MessageCircle, List } from "lucide-react";
+
+function Navigation() {
+  const [activeTab, setActiveTab] = useState<'messages' | 'logs'>('messages');
+
+  return (
+    <header className="bg-card border-b border-border sticky top-0 z-10">
+      <div className="px-4 py-3">
+        <h1 className="text-xl font-semibold text-center text-foreground" data-testid="app-title">
+          Daily Inspiration SMS
+        </h1>
+      </div>
+      <nav className="flex">
+        <button
+          onClick={() => setActiveTab('messages')}
+          className={cn(
+            "flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors",
+            activeTab === 'messages'
+              ? "text-primary border-primary bg-secondary/30"
+              : "text-muted-foreground border-transparent hover:bg-muted"
+          )}
+          data-testid="tab-messages"
+        >
+          <MessageCircle className="inline-block w-4 h-4 mr-2" />
+          Messages
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={cn(
+            "flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors",
+            activeTab === 'logs'
+              ? "text-primary border-primary bg-secondary/30"
+              : "text-muted-foreground border-transparent hover:bg-muted"
+          )}
+          data-testid="tab-logs"
+        >
+          <List className="inline-block w-4 h-4 mr-2" />
+          Delivery Logs
+        </button>
+      </nav>
+    </header>
+  );
+}
+
+function Router() {
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <Navigation />
+      <main className="flex-1 flex flex-col">
+        <Switch>
+          <Route path="/" component={Messages} />
+          <Route path="/messages" component={Messages} />
+          <Route path="/logs" component={Logs} />
+          <Route component={NotFound} />
+        </Switch>
+      </main>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Router />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
