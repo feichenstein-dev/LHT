@@ -218,6 +218,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const apiKey = process.env.TELNYX_API_KEY;
       const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
       
+      console.log("=== TELNYX DEBUG ===");
+      console.log(`API Key exists: ${!!apiKey}`);
+      console.log(`Phone exists: ${!!phoneNumber}`);
+      
+      if (apiKey) {
+        console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
+        console.log(`Starts with KEY: ${apiKey.startsWith('KEY')}`);
+      }
+      
       if (!apiKey) {
         return res.status(400).json({ error: "TELNYX_API_KEY not set" });
       }
@@ -230,24 +239,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!apiKey.startsWith('KEY')) {
         return res.status(400).json({ 
           error: "Invalid API key format. Telnyx API keys should start with 'KEY'",
+          current: `${apiKey.substring(0, 10)}...`,
           hint: "Get your API key from https://portal.telnyx.com/#/app/api-keys"
         });
       }
       
       // Test authentication by making a simple API call
       const telnyxClient = new Telnyx(apiKey);
+      console.log("Testing Telnyx authentication...");
       await telnyxClient.phoneNumbers.list({ page: { size: 1 } });
       
       res.json({ 
         status: "success", 
         message: "Telnyx configuration is valid",
-        phoneNumber: phoneNumber
+        phoneNumber: phoneNumber,
+        apiKeyFormat: `${apiKey.substring(0, 10)}...`
       });
     } catch (error: any) {
       console.error("Telnyx test error:", error);
       res.status(400).json({ 
         error: "Telnyx configuration failed",
         message: error.message,
+        statusCode: error.statusCode || 'unknown',
         hint: "Check your TELNYX_API_KEY and ensure it's valid"
       });
     }
