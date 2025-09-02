@@ -48,13 +48,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Send SMS via Telnyx
-          const telnyxClient = new Telnyx(process.env.TELNYX_API_KEY || '');
+          const apiKey = process.env.TELNYX_API_KEY;
+          const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
+          
+          if (!apiKey || !phoneNumber) {
+            throw new Error(`Missing Telnyx configuration: API_KEY=${!!apiKey}, PHONE=${!!phoneNumber}`);
+          }
+          
+          console.log(`Sending SMS to ${subscriber.phone_number} from ${phoneNumber}`);
+          
+          // Check API key format
+          if (!apiKey.startsWith('KEY')) {
+            throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Get your key from https://portal.telnyx.com/#/app/api-keys`);
+          }
+          
+          const telnyxClient = new Telnyx(apiKey);
           const response = await telnyxClient.messages.create({
-            from: process.env.TELNYX_PHONE_NUMBER || '+1234567890',
+            from: phoneNumber,
             to: subscriber.phone_number,
             text: message.body,
-            webhook_url: `${process.env.WEBHOOK_BASE_URL || 'https://your-app.com'}/api/webhooks/telnyx`,
-          } as any);
+            webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
+          });
 
           // Update delivery log with Telnyx message ID
           await storage.updateDeliveryLogStatus(
@@ -186,6 +200,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching delivery stats:", error);
       res.status(500).json({ message: "Failed to fetch delivery stats" });
+    }
+  });
+
+  // Test Telnyx configuration endpoint
+  app.get("/api/test-telnyx", async (req, res) => {
+    try {
+      const apiKey = process.env.TELNYX_API_KEY;
+      const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "TELNYX_API_KEY not set" });
+      }
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "TELNYX_PHONE_NUMBER not set" });
+      }
+      
+      // Check API key format
+      if (!apiKey.startsWith('KEY')) {
+        return res.status(400).json({ 
+          error: "Invalid API key format. Telnyx API keys should start with 'KEY'",
+          hint: "Get your API key from https://portal.telnyx.com/#/app/api-keys"
+        });
+      }
+      
+      // Test authentication by making a simple API call
+      const telnyxClient = new Telnyx(apiKey);
+      await telnyxClient.phoneNumbers.list({ limit: 1 });
+      
+      res.json({ 
+        status: "success", 
+        message: "Telnyx configuration is valid",
+        phoneNumber: phoneNumber
+      });
+    } catch (error: any) {
+      console.error("Telnyx test error:", error);
+      res.status(400).json({ 
+        error: "Telnyx configuration failed",
+        message: error.message,
+        hint: "Check your TELNYX_API_KEY and ensure it's valid"
+      });
     }
   });
 
