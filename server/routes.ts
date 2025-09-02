@@ -69,7 +69,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             to: subscriber.phone_number,
             text: message.body,
             webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
-          });
+          } as any);
 
           // Update delivery log with Telnyx message ID
           await storage.updateDeliveryLogStatus(
@@ -82,11 +82,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           console.error(`Failed to send to ${subscriber.phone_number}:`, error);
           
-          // Update existing delivery log with failed status instead of creating new one
-          await storage.updateDeliveryLogStatus(
-            deliveryLog.id,
-            "failed"
-          );
+          // Create delivery log with failed status
+          await storage.createDeliveryLog({
+            message_id: message.id,
+            subscriber_id: subscriber.id,
+            status: "failed",
+            direction: "outbound",
+            message_text: message.body,
+          });
 
           return { success: false, subscriber: subscriber.phone_number, error: error instanceof Error ? error.message : 'Unknown error' };
         }
@@ -233,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Test authentication by making a simple API call
       const telnyxClient = new Telnyx(apiKey);
-      await telnyxClient.phoneNumbers.list({ limit: 1 });
+      await telnyxClient.phoneNumbers.list({ page: { size: 1 } });
       
       res.json({ 
         status: "success", 
