@@ -56,10 +56,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           console.log(`Sending SMS to ${subscriber.phone_number} from ${phoneNumber}`);
+          console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
           
           // Check API key format
           if (!apiKey.startsWith('KEY')) {
-            throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Get your key from https://portal.telnyx.com/#/app/api-keys`);
+            throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Current format: ${apiKey.substring(0, 10)}... Get your key from https://portal.telnyx.com/#/app/api-keys`);
           }
           
           const telnyxClient = new Telnyx(apiKey);
@@ -81,14 +82,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           console.error(`Failed to send to ${subscriber.phone_number}:`, error);
           
-          // Update delivery log with failed status
-          await storage.createDeliveryLog({
-            message_id: message.id,
-            subscriber_id: subscriber.id,
-            status: "failed",
-            direction: "outbound",
-            message_text: message.body,
-          });
+          // Update existing delivery log with failed status instead of creating new one
+          await storage.updateDeliveryLogStatus(
+            deliveryLog.id,
+            "failed"
+          );
 
           return { success: false, subscriber: subscriber.phone_number, error: error instanceof Error ? error.message : 'Unknown error' };
         }
@@ -97,6 +95,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const results = await Promise.all(deliveryPromises);
       const successCount = results.filter(r => r.success).length;
       const failedCount = results.filter(r => !r.success).length;
+
+      // Log the actual results for debugging
+      console.log(`Message delivery summary: ${successCount} sent, ${failedCount} failed`);
+      results.forEach(result => {
+        if (!result.success) {
+          console.log(`Failed delivery to ${result.subscriber}: ${result.error}`);
+        }
+      });
 
       res.json({
         message,
