@@ -218,13 +218,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const apiKey = process.env.TELNYX_API_KEY;
       const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
       
-      console.log("=== TELNYX DEBUG ===");
-      console.log(`API Key exists: ${!!apiKey}`);
-      console.log(`Phone exists: ${!!phoneNumber}`);
+      console.log("Testing Telnyx configuration...");
       
       if (apiKey) {
         console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
-        console.log(`Starts with KEY: ${apiKey.startsWith('KEY')}`);
       }
       
       if (!apiKey) {
