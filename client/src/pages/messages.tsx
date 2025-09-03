@@ -70,11 +70,15 @@ export default function Messages() {
     }
   };
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or on initial mount
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
+    if (!chatContainerRef.current) return;
+    // Use setTimeout to ensure DOM updates before scrolling
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 0);
   }, [messages]);
 
   const activeSubscribers = subscribers.filter((sub: Subscriber) => sub.status === 'active');
@@ -88,12 +92,13 @@ export default function Messages() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Chat Container */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
+        className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
         data-testid="chat-container"
+        style={{ maxHeight: 'calc(100vh - 180px)' }}
       >
         <div className="space-y-4 max-w-4xl mx-auto">
           {messages.length === 0 ? (
@@ -132,7 +137,7 @@ export default function Messages() {
               <div className="bg-muted rounded-3xl px-4 py-2 min-h-[44px] flex items-center">
                 <Textarea
                   ref={textareaRef}
-                  placeholder="Type your daily inspiration message..."
+                  placeholder="Type your daily lashon hara message..."
                   value={messageText}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}

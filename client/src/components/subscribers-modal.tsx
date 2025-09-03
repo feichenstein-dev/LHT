@@ -19,6 +19,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   // Debug: log modal open state
   // ...removed test log...
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [subscriberName, setSubscriberName] = useState("");
   // ...removed toast usage...
   const queryClient = useQueryClient();
 
@@ -38,9 +39,10 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   // ...removed error toast...
 
   const addSubscriberMutation = useMutation({
-    mutationFn: async (phone: string) => {
+    mutationFn: async ({ phone, name }: { phone: string; name: string }) => {
       const response = await apiRequest("POST", "/api/subscribers", {
         phone_number: phone,
+        name,
         status: "active",
       });
       return response.json();
@@ -48,6 +50,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
+      setSubscriberName("");
   // ...removed add success toast...
     },
     onError: (error: any) => {
@@ -83,7 +86,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     } else if (!formatted.startsWith('+')) {
       formatted = '+' + formatted;
     }
-    addSubscriberMutation.mutate(formatted);
+    addSubscriberMutation.mutate({ phone: formatted, name: subscriberName.trim() });
   };
 
   const handleRemoveSubscriber = (id: string) => {
@@ -118,7 +121,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         </DialogHeader>
         <div className="space-y-4">
           {/* Add Subscriber */}
-          <div className="flex gap-2 p-4 border-b border-border">
+          <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
             <Input
               type="tel"
               placeholder="+1 (555) 123-4567"
@@ -130,6 +133,20 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 }
               }}
               data-testid="input-phone-number"
+              className="flex-1 min-w-0"
+            />
+            <Input
+              type="text"
+              placeholder="Name (optional)"
+              value={subscriberName}
+              onChange={(e) => setSubscriberName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddSubscriber();
+                }
+              }}
+              data-testid="input-subscriber-name"
+              className="flex-1 min-w-0"
             />
             <Button 
               onClick={handleAddSubscriber}
@@ -182,7 +199,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                         disabled={removeSubscriberMutation.isPending}
                         data-testid={`button-remove-${subscriber.id}`}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
                       </Button>
                     </div>
                   </div>

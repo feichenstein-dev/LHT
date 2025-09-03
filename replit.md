@@ -1,4 +1,4 @@
-# Daily Inspiration SMS
+# Lashon Hara Texts
 
 ## Overview
 
