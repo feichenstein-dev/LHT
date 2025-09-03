@@ -20,10 +20,23 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
+  const {
+    data: subscribers = [],
+    isLoading,
+    error: fetchError
+  } = useQuery<Subscriber[]>({
     queryKey: ["/api/subscribers"],
     enabled: open,
   });
+
+  // Show error toast if fetching subscribers fails
+  if (fetchError) {
+    toast({
+      title: "Error loading subscribers",
+      description: fetchError.message || "Failed to fetch subscribers.",
+      variant: "destructive",
+    });
+  }
 
   const addSubscriberMutation = useMutation({
     mutationFn: async (phone: string) => {
