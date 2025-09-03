@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useToast } from "@/hooks/use-toast";
+// ...removed useToast import...
 import { apiRequest } from "@/lib/queryClient";
 import { formatPhoneNumber, validatePhoneNumber } from "@/lib/supabase";
 import { Trash2, X } from "lucide-react";
@@ -16,19 +16,33 @@ interface SubscribersModalProps {
 }
 
 export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) {
+  // Debug: log modal open state
+  // ...removed test log...
   const [phoneNumber, setPhoneNumber] = useState("");
-  const { toast } = useToast();
+  const [subscriberName, setSubscriberName] = useState("");
+  // ...removed toast usage...
   const queryClient = useQueryClient();
 
-  const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
+  const {
+    data: subscribers = [],
+    isLoading,
+    error: fetchError
+  } = useQuery<Subscriber[]>({
     queryKey: ["/api/subscribers"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/subscribers");
+      return response.json();
+    },
     enabled: open,
   });
 
+  // ...removed error toast...
+
   const addSubscriberMutation = useMutation({
-    mutationFn: async (phone: string) => {
+    mutationFn: async ({ phone, name }: { phone: string; name: string }) => {
       const response = await apiRequest("POST", "/api/subscribers", {
         phone_number: phone,
+        name,
         status: "active",
       });
       return response.json();
@@ -36,17 +50,11 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
-      toast({
-        title: "Success",
-        description: "Subscriber added successfully",
-      });
+      setSubscriberName("");
+  // ...removed add success toast...
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add subscriber",
-        variant: "destructive",
-      });
+  // ...removed add error toast...
     },
   });
 
@@ -56,33 +64,29 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      toast({
-        title: "Success",
-        description: "Subscriber removed successfully",
-      });
+  // ...removed remove success toast...
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to remove subscriber",
-        variant: "destructive",
-      });
+  // ...removed remove error toast...
     },
   });
 
   const handleAddSubscriber = () => {
     if (!phoneNumber.trim()) return;
-    
     if (!validatePhoneNumber(phoneNumber)) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid phone number",
-        variant: "destructive",
-      });
+      window.alert("Please enter a valid phone number");
       return;
     }
-
-    addSubscriberMutation.mutate(phoneNumber);
+    // Enforce E.164 format
+    let formatted = phoneNumber.replace(/\D/g, '');
+    if (formatted.length === 10) {
+      formatted = '+1' + formatted;
+    } else if (formatted.length === 11 && formatted.startsWith('1')) {
+      formatted = '+' + formatted;
+    } else if (!formatted.startsWith('+')) {
+      formatted = '+' + formatted;
+    }
+    addSubscriberMutation.mutate({ phone: formatted, name: subscriberName.trim() });
   };
 
   const handleRemoveSubscriber = (id: string) => {
@@ -101,15 +105,23 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(openState) => {
+        console.log('Dialog onOpenChange:', openState);
+        onOpenChange(openState);
+        if (!openState) {
+          // ...removed debug toast and related lines...
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Manage Subscribers</DialogTitle>
         </DialogHeader>
-        
         <div className="space-y-4">
           {/* Add Subscriber */}
-          <div className="flex gap-2 p-4 border-b border-border">
+          <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
             <Input
               type="tel"
               placeholder="+1 (555) 123-4567"
@@ -121,6 +133,20 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 }
               }}
               data-testid="input-phone-number"
+              className="flex-1 min-w-0"
+            />
+            <Input
+              type="text"
+              placeholder="Name (optional)"
+              value={subscriberName}
+              onChange={(e) => setSubscriberName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddSubscriber();
+                }
+              }}
+              data-testid="input-subscriber-name"
+              className="flex-1 min-w-0"
             />
             <Button 
               onClick={handleAddSubscriber}
@@ -142,34 +168,43 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 No subscribers yet. Add your first subscriber above.
               </div>
             ) : (
-              subscribers.map((subscriber) => (
-                <div 
-                  key={subscriber.id}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50"
-                  data-testid={`subscriber-${subscriber.id}`}
-                >
-                  <div className="flex-1">
-                    <div className="font-medium" data-testid="subscriber-phone">
-                      {formatPhoneNumber(subscriber.phone_number)}
+              <>
+                {subscribers.map((subscriber) => (
+                  <div 
+                    key={subscriber.id}
+                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50"
+                    data-testid={`subscriber-${subscriber.id}`}
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium flex items-center gap-2" data-testid="subscriber-phone">
+                        {subscriber.name && (
+                          <span className="rounded bg-gray-100 px-2 py-1 text-gray-800 font-semibold text-sm">
+                            {subscriber.name}
+                          </span>
+                        )}
+                        <span className="text-gray-500 text-sm tracking-wide">
+                          {formatPhoneNumber(subscriber.phone_number)}
+                        </span>
+                      </div>
+                      <div className="text-sm text-muted-foreground" data-testid="subscriber-join-date">
+                        Joined {formatJoinDate(subscriber.joined_at ? subscriber.joined_at.toString() : '')}
+                      </div>
                     </div>
-                    <div className="text-sm text-muted-foreground" data-testid="subscriber-join-date">
-                      Joined {formatJoinDate(subscriber.joined_at ? subscriber.joined_at.toString() : '')}
+                    <div className="flex items-center space-x-2">
+                      <StatusBadge status={subscriber.status || 'active'} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveSubscriber(subscriber.id)}
+                        disabled={removeSubscriberMutation.isPending}
+                        data-testid={`button-remove-${subscriber.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <StatusBadge status={subscriber.status || 'active'} />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveSubscriber(subscriber.id)}
-                      disabled={removeSubscriberMutation.isPending}
-                      data-testid={`button-remove-${subscriber.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))
+                ))}
+              </>
             )}
           </div>
         </div>

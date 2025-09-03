@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+// ...removed useToast import...
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/ui/message-bubble";
 import { SubscribersModal } from "@/components/subscribers-modal";
-import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimestamp } from "@/lib/supabase";
 import { Send, Users } from "lucide-react";
@@ -15,11 +15,12 @@ export default function Messages() {
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+  // ...removed toast usage...
   const queryClient = useQueryClient();
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages"],
+    select: (msgs) => [...msgs].sort((a, b) => new Date(a.sent_at || '').getTime() - new Date(b.sent_at || '').getTime()),
   });
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
@@ -31,46 +32,24 @@ export default function Messages() {
       const response = await apiRequest("POST", "/api/messages", { body });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
-      
-      const { delivery } = data;
-      if (delivery.failed > 0) {
-        toast({
-          title: "Partially Sent",
-          description: `Message sent to ${delivery.sent} contacts, failed to send to ${delivery.failed} contacts`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: `Message sent to ${delivery.sent} contacts!`,
-        });
-      }
+      // Optionally, you can add non-intrusive feedback here (e.g., a status bar or toast)
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
-        variant: "destructive",
-      });
+      // Optionally, you can add non-intrusive error feedback here
     },
   });
 
   const handleSendMessage = () => {
     if (!messageText.trim()) return;
-    
+    // Optionally, you can add non-intrusive feedback here if no subscribers
     if (subscribers.length === 0) {
-      toast({
-        title: "No Subscribers",
-        description: "Add subscribers before sending messages",
-        variant: "destructive",
-      });
+      // No popup
       return;
     }
-
     sendMessageMutation.mutate(messageText);
   };
 
@@ -91,11 +70,15 @@ export default function Messages() {
     }
   };
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or on initial mount
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
+    if (!chatContainerRef.current) return;
+    // Use setTimeout to ensure DOM updates before scrolling
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 0);
   }, [messages]);
 
   const activeSubscribers = subscribers.filter((sub: Subscriber) => sub.status === 'active');
@@ -109,12 +92,13 @@ export default function Messages() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Chat Container */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
+        className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
         data-testid="chat-container"
+        style={{ maxHeight: 'calc(100vh - 180px)' }}
       >
         <div className="space-y-4 max-w-4xl mx-auto">
           {messages.length === 0 ? (
@@ -127,11 +111,18 @@ export default function Messages() {
               <MessageBubble
                 key={message.id}
                 message={message.body}
-                timestamp={formatTimestamp(message.sent_at ? message.sent_at.toString() : '')}
-                deliveryInfo={{
-                  count: activeSubscribers.length,
-                  status: 'delivered', // This would come from delivery logs in a real implementation
-                }}
+                timestamp={
+                  message.sent_at
+                    ? new Date(message.sent_at).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : ''
+                }
               />
             ))
           )}
@@ -146,7 +137,7 @@ export default function Messages() {
               <div className="bg-muted rounded-3xl px-4 py-2 min-h-[44px] flex items-center">
                 <Textarea
                   ref={textareaRef}
-                  placeholder="Type your daily inspiration message..."
+                  placeholder="Type your daily lashon hara message..."
                   value={messageText}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}

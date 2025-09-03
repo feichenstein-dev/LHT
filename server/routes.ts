@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import * as storageModule from "./storage";
+const storage = storageModule.storage;
 import { insertMessageSchema, insertSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -38,6 +39,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send SMS to each subscriber via Telnyx
       const deliveryPromises = activeSubscribers.map(async (subscriber) => {
         try {
+          if (!message) throw new Error('Message is undefined');
           // Create delivery log entry with pending status
           const deliveryLog = await storage.createDeliveryLog({
             message_id: message.id,
@@ -50,19 +52,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Send SMS via Telnyx
           const apiKey = process.env.TELNYX_API_KEY;
           const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
-          
           if (!apiKey || !phoneNumber) {
             throw new Error(`Missing Telnyx configuration: API_KEY=${!!apiKey}, PHONE=${!!phoneNumber}`);
           }
-          
           console.log(`Sending SMS to ${subscriber.phone_number} from ${phoneNumber}`);
           console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
-          
           // Check API key format
           if (!apiKey.startsWith('KEY')) {
             throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Current format: ${apiKey.substring(0, 10)}... Get your key from https://portal.telnyx.com/#/app/api-keys`);
           }
-          
           const telnyxClient = new Telnyx(apiKey);
           const response = await telnyxClient.messages.create({
             from: phoneNumber,
@@ -72,25 +70,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } as any);
 
           // Update delivery log with Telnyx message ID
-          await storage.updateDeliveryLogStatus(
-            deliveryLog.id,
-            "sent",
-            response.data?.id
-          );
-
+          if (deliveryLog) {
+            await storage.updateDeliveryLogStatus(
+              deliveryLog.id,
+              "sent",
+              response.data?.id
+            );
+          }
           return { success: true, subscriber: subscriber.phone_number };
         } catch (error) {
           console.error(`Failed to send to ${subscriber.phone_number}:`, error);
-          
           // Create delivery log with failed status
-          await storage.createDeliveryLog({
-            message_id: message.id,
-            subscriber_id: subscriber.id,
-            status: "failed",
-            direction: "outbound",
-            message_text: message.body,
-          });
-
+          if (message) {
+            await storage.createDeliveryLog({
+              message_id: message.id,
+              subscriber_id: subscriber.id,
+              status: "failed",
+              direction: "outbound",
+              message_text: message.body,
+            });
+          }
           return { success: false, subscriber: subscriber.phone_number, error: error instanceof Error ? error.message : 'Unknown error' };
         }
       });
@@ -266,37 +265,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Telnyx webhook endpoint for delivery status updates
   app.post("/api/webhooks/telnyx", async (req, res) => {
     try {
+      console.log('Telnyx webhook received:', JSON.stringify(req.body, null, 2));
       const { data } = req.body;
-      
+      // Handle delivery status updates
       if (data && data.event_type === "message.finalized") {
         const { id: telnyxMessageId, to, delivery_status } = data.payload;
-        
-        // Find delivery log by Telnyx message ID
-        const { logs } = await storage.getDeliveryLogs({
-          search: telnyxMessageId,
-          limit: 1,
-        });
-        
+        const { logs } = await storage.getDeliveryLogs({ search: telnyxMessageId, limit: 1 });
         if (logs.length > 0) {
           const log = logs[0];
           let status = "sent";
-          
           switch (delivery_status) {
-            case "delivered":
-              status = "delivered";
-              break;
+            case "delivered": status = "delivered"; break;
             case "failed":
-            case "undelivered":
-              status = "failed";
-              break;
-            default:
-              status = "sent";
+            case "undelivered": status = "failed"; break;
+            default: status = "sent";
           }
-          
           await storage.updateDeliveryLogStatus(log.id, status);
         }
       }
-      
+
+      // Handle inbound SMS for joining
+      if (data && data.event_type === "message.received") {
+  const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
+        const text = data.payload.text;
+        const joinMatch = text.match(/^join(.*)$/i);
+        const stopMatch = text.match(/^stop$/i);
+        let name: string | null = null;
+        const apiKey = process.env.TELNYX_API_KEY;
+        const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+        if (joinMatch) {
+          name = joinMatch[1].trim();
+          if (name === "") name = null;
+          const existing = await storage.getSubscriberByPhone(from);
+          if (!existing) {
+            await storage.createSubscriber({ phone_number: from, name });
+          } else {
+            // If name is provided and different, update name and updated_at
+            if (name && name !== existing.name) {
+              const now = new Date().toISOString();
+              // Use Supabase directly to update
+              await storageModule.supabase
+                .from('subscribers')
+                .update({ name, updated_at: now })
+                .eq('id', existing.id);
+            }
+            // If status is not active, reactivate
+            if (existing.status !== 'active') {
+              const now = new Date().toISOString();
+              await storageModule.supabase
+                .from('subscribers')
+                .update({ status: 'active', updated_at: now })
+                .eq('id', existing.id);
+            }
+          }
+          // Send welcome/help message
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`
+            } as any);
+          }
+        }
+        if (text.match(/^help$/i)) {
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`
+            } as any);
+          }
+        }
+        if (stopMatch) {
+          const existing = await storage.getSubscriberByPhone(from);
+          if (existing && existing.status === 'active') {
+            await storage.deleteSubscriber(existing.id);
+            // Send confirmation
+            if (apiKey && telnyxNumber) {
+              const telnyxClient = new Telnyx(apiKey);
+              await telnyxClient.messages.create({
+                from: telnyxNumber,
+                to: from,
+                text: `You have been unsubscribed. Reply JOIN with your name to subscribe again.`
+              } as any);
+            }
+          }
+        }
+      }
+
       res.status(200).json({ received: true });
     } catch (error) {
       console.error("Error processing Telnyx webhook:", error);

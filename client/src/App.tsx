@@ -1,7 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+// ...removed Toaster import...
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ function Navigation() {
     <header className="bg-card border-b border-border sticky top-0 z-10">
       <div className="px-4 py-3">
         <h1 className="text-xl font-semibold text-center text-foreground" data-testid="app-title">
-          Daily Inspiration SMS
+          Lashon Hara Texts
         </h1>
       </div>
       <nav className="flex">
@@ -54,9 +54,9 @@ function Navigation() {
 
 function Router() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Navigation />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-h-0">
         <Switch>
           <Route path="/" component={Messages} />
           <Route path="/messages" component={Messages} />
@@ -68,11 +68,15 @@ function Router() {
   );
 }
 
+import { useEffect } from "react";
+// ...removed useToast import...
+
 function App() {
+  // ...existing code...
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
+  {/* ...removed Toaster component... */}
         <Router />
       </TooltipProvider>
     </QueryClientProvider>
