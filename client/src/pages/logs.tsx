@@ -37,6 +37,7 @@ export default function Logs() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
   const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [filterDate, setFilterDate] = useState<string>("");
 
 
   // Fetch messages for dropdown and joining
@@ -116,7 +117,11 @@ export default function Logs() {
     messageDropdownOptions = Object.values(grouped).map((msg: any) => ({
       value: msg.message_text,
       label: msg.message_text,
-      date: '',
+      date: msg.logs.length > 0
+        ? new Date(Math.max(...msg.logs.map((log: any) => new Date(log.updated_at).getTime()))).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+          })
+        : '',
     }));
   }
 
@@ -182,6 +187,31 @@ export default function Logs() {
     );
   }
 
+  // Filter by date
+  if (filterDate) {
+    filteredMessages = filteredMessages.filter((msg: any) => {
+      // Outbound: use sent_at
+      if (direction === 'outbound') {
+        if (!msg.sent_at) return false;
+        const msgDate = new Date(msg.sent_at);
+        const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
+        return msgDateStr === filterDate;
+      }
+      // Inbound: use latest updated_at from logs
+      if (direction === 'inbound') {
+        if (!msg.logs || msg.logs.length === 0) return false;
+        const latestLog = msg.logs.reduce((latest: any, log: any) => {
+          const logDate = new Date(log.updated_at);
+          return logDate > new Date(latest.updated_at) ? log : latest;
+        }, msg.logs[0]);
+        const logDate = new Date(latestLog.updated_at);
+        const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
+        return logDateStr === filterDate;
+      }
+      return false;
+    });
+  }
+
   return (
     <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-8 px-2">
       <Card className="w-full max-w-full mx-auto">
@@ -218,15 +248,30 @@ export default function Logs() {
                   </SelectItem>
                   {messageDropdownOptions.map((opt, idx) => (
                     <SelectItem key={idx} value={opt.value}>
-                      <div className="flex items-center w-full">
-                        <span className="truncate max-w-[1200px]">{opt.label}</span>
-                        <span className="flex-1" />
-                        <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">{opt.date}</span>
+                      <div className="flex items-center w-full justify-between">
+                        <span className="truncate max-w-[1200px] mr-4">{opt.label}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {opt.date ? new Date(opt.date).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                          }) : ""}
+                        </span>
                       </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <input
+                type="date"
+                className="w-40 h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
+                value={filterDate}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    setFilterDate(""); // Clear filter if no date selected
+                    return;
+                  }
+                  setFilterDate(e.target.value); // Use the raw value from the input (YYYY-MM-DD)
+                }}
+              />
             </div>
           </div>
           <div className="bg-background rounded-xl shadow-md w-full overflow-x-auto" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
