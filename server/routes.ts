@@ -8,6 +8,44 @@ import { z } from "zod";
 import Telnyx from 'telnyx';
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Retry message endpoint
+  app.post("/api/retry-message", async (req, res) => {
+    try {
+      const { message_id, phone_number } = req.body;
+      if (!message_id || !phone_number) {
+        return res.status(400).json({ message: "Missing message_id or phone_number" });
+      }
+      // Fetch the message body from storage
+      const message = await storage.getMessageById(message_id);
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+      const apiKey = process.env.TELNYX_API_KEY;
+      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+      if (!apiKey || !telnyxNumber) {
+        return res.status(500).json({ message: "Missing Telnyx configuration" });
+      }
+      const telnyxClient = new Telnyx(apiKey);
+      await telnyxClient.messages.create({
+        from: telnyxNumber,
+        to: phone_number,
+        text: message.body,
+        webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
+      } as any);
+      // Log retry attempt as 'sent' (will be updated by webhook)
+      await storage.createDeliveryLog({
+        message_id,
+        subscriber_id: null, // Could look up by phone_number if needed
+        status: "sent",
+        direction: "outbound",
+        message_text: message.body,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error retrying message:", error);
+      res.status(500).json({ message: "Failed to retry message" });
+    }
+  });
   // Messages endpoints
   app.get("/api/messages", async (req, res) => {
     try {
@@ -40,15 +78,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveryPromises = activeSubscribers.map(async (subscriber) => {
         try {
           if (!message) throw new Error('Message is undefined');
-          // Create delivery log entry with pending status
-          const deliveryLog = await storage.createDeliveryLog({
-            message_id: message.id,
-            subscriber_id: subscriber.id,
-            status: "pending",
-            direction: "outbound",
-            message_text: message.body,
-          });
-
           // Send SMS via Telnyx
           const apiKey = process.env.TELNYX_API_KEY;
           const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
@@ -68,15 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             text: message.body,
             webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
           } as any);
-
-          // Update delivery log with Telnyx message ID
-          if (deliveryLog) {
-            await storage.updateDeliveryLogStatus(
-              deliveryLog.id,
-              "sent",
-              response.data?.id
-            );
-          }
+          // Do not log delivery until webhook returns final status
           return { success: true, subscriber: subscriber.phone_number };
         } catch (error) {
           console.error(`Failed to send to ${subscriber.phone_number}:`, error);
@@ -173,7 +194,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/delivery-logs", async (req, res) => {
     try {
       const { search, status, dateRange, page = "1", limit = "10" } = req.query;
-      
       const pageNum = parseInt(page as string, 10);
       const limitNum = parseInt(limit as string, 10);
       const offset = (pageNum - 1) * limitNum;
@@ -186,13 +206,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
       });
 
+      // Patch: Always return logs and pagination in expected format
       res.json({
-        logs,
+        logs: logs ?? [],
         pagination: {
           page: pageNum,
           limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum),
+          total: total ?? 0,
+          totalPages: Math.max(1, Math.ceil((total ?? 0) / limitNum)),
         },
       });
     } catch (error) {
@@ -269,19 +290,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data } = req.body;
       // Handle delivery status updates
       if (data && data.event_type === "message.finalized") {
-        const { id: telnyxMessageId, to, delivery_status } = data.payload;
-        const { logs } = await storage.getDeliveryLogs({ search: telnyxMessageId, limit: 1 });
-        if (logs.length > 0) {
-          const log = logs[0];
-          let status = "sent";
-          switch (delivery_status) {
-            case "delivered": status = "delivered"; break;
-            case "failed":
-            case "undelivered": status = "failed"; break;
-            default: status = "sent";
-          }
-          await storage.updateDeliveryLogStatus(log.id, status);
+        const { id: telnyxMessageId, to, delivery_status, text, from } = data.payload;
+        // Only log when status is final
+        let status = "sent";
+        switch (delivery_status) {
+          case "delivered": status = "delivered"; break;
+          case "failed":
+          case "undelivered": status = "failed"; break;
+          default: status = "sent";
         }
+        // Try to get name and phone number from Telnyx info
+        let phone_number = "";
+        let name = "";
+        if (typeof to === "string") {
+          phone_number = to;
+        } else if (to && typeof to.phone_number === "string") {
+          phone_number = to.phone_number;
+        }
+        if (from && typeof from.name === "string") {
+          name = from.name;
+        }
+        await storage.createDeliveryLog({
+          message_id: null, // If you have message_id, pass it here
+          subscriber_id: null, // If you have subscriber_id, pass it here
+          status,
+          direction: "outbound",
+          message_text: text,
+        });
       }
 
       // Handle inbound SMS for joining
@@ -318,6 +353,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .eq('id', existing.id);
             }
           }
+          // Log inbound join to delivery logs
+          await storage.createDeliveryLog({
+            message_id: null,
+            subscriber_id: null,
+            status: "received",
+            direction: "inbound",
+            message_text: text,
+          });
           // Send welcome/help message
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);

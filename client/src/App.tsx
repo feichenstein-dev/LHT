@@ -1,4 +1,5 @@
 import { Switch, Route } from "wouter";
+import { Link, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 // ...removed Toaster import...
@@ -11,8 +12,8 @@ import NotFound from "@/pages/not-found";
 import { MessageCircle, List } from "lucide-react";
 
 function Navigation() {
-  const [activeTab, setActiveTab] = useState<'messages' | 'logs'>('messages');
-
+  // Use location for active tab highlight
+  const [location] = useLocation();
   return (
     <header className="bg-card border-b border-border sticky top-0 z-10">
       <div className="px-4 py-3">
@@ -21,11 +22,11 @@ function Navigation() {
         </h1>
       </div>
       <nav className="flex">
-        <button
-          onClick={() => setActiveTab('messages')}
+        <Link
+          href="/messages"
           className={cn(
             "flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors",
-            activeTab === 'messages'
+            location === "/" || location === "/messages"
               ? "text-primary border-primary bg-secondary/30"
               : "text-muted-foreground border-transparent hover:bg-muted"
           )}
@@ -33,12 +34,12 @@ function Navigation() {
         >
           <MessageCircle className="inline-block w-4 h-4 mr-2" />
           Messages
-        </button>
-        <button
-          onClick={() => setActiveTab('logs')}
+        </Link>
+        <Link
+          href="/logs"
           className={cn(
             "flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors",
-            activeTab === 'logs'
+            location === "/logs"
               ? "text-primary border-primary bg-secondary/30"
               : "text-muted-foreground border-transparent hover:bg-muted"
           )}
@@ -46,7 +47,7 @@ function Navigation() {
         >
           <List className="inline-block w-4 h-4 mr-2" />
           Delivery Logs
-        </button>
+        </Link>
       </nav>
     </header>
   );

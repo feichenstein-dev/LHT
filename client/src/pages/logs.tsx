@@ -1,274 +1,386 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { LogDetailModal } from "@/components/log-detail-modal";
-import { formatPhoneNumber, formatTimestamp } from "@/lib/supabase";
-import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { formatPhoneNumber } from "@/lib/supabase";
+import { ChevronDown, Eye } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { DeliveryLog, Subscriber } from "@shared/schema";
 
 export default function Logs() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [selectedLog, setSelectedLog] = useState<(DeliveryLog & { subscriber: Subscriber | null }) | null>(null);
-  const [logDetailOpen, setLogDetailOpen] = useState(false);
-
-  const limit = 10;
-
+  // ...existing code...
   const { data: logsData, isLoading } = useQuery({
-    queryKey: ["/api/delivery-logs", { search, status: statusFilter, dateRange: dateFilter, page, limit }],
+    queryKey: ["/api/delivery-logs", "all"],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-      });
-      
-      if (search) params.append('search', search);
-      if (statusFilter) params.append('status', statusFilter);
-      if (dateFilter) params.append('dateRange', dateFilter);
-      
-      const response = await fetch(`/api/delivery-logs?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch logs');
+      const response = await fetch("/api/delivery-logs?limit=10000&page=1");
+      if (!response.ok) throw new Error("Failed to fetch logs");
+      return response.json();
+    },
+  });
+  const logs = logsData?.logs || [];
+
+  // Dynamic status options for outbound delivery logs
+  const statusOptions = Array.from(
+    new Set(
+      logs
+        .filter((log: any) => log.direction === 'outbound')
+        .map((log: any) => log.status)
+        .filter(Boolean)
+    )
+  );
+
+  // Filters
+  const [filterText, setFilterText] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
+  const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+
+
+  // Fetch messages for dropdown and joining
+  const { data: messagesData, isLoading: isMessagesLoading } = useQuery({
+    queryKey: ["/api/messages"],
+    queryFn: async () => {
+      const response = await fetch("/api/messages");
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      return response.json();
+    },
+    select: (msgs) => [...msgs].sort((a, b) => new Date(b.sent_at || '').getTime() - new Date(a.sent_at || '').getTime()),
+  });
+
+  // Fetch subscribers for joining
+  const { data: subscribersData } = useQuery({
+    queryKey: ["/api/subscribers"],
+    queryFn: async () => {
+      const response = await fetch("/api/subscribers");
+      if (!response.ok) throw new Error("Failed to fetch subscribers");
       return response.json();
     },
   });
 
-  const { data: stats } = useQuery<{totalSent: number; delivered: number; failed: number; pending: number;}>({ 
-    queryKey: ["/api/delivery-stats"],
-  });
+  // Aggregate logs by message_id, join with subscribers for name/phone
+  let filteredMessages: any[] = [];
+  let messageDropdownOptions: any[] = [];
+  if (direction === 'outbound' && messagesData) {
+    const messages = messagesData.map((msg: any) => {
+      const msgLogs = logs.filter((log: any) => log.message_id === msg.id).map((log: any) => {
+        let subscriber = null;
+        if (subscribersData) {
+          subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+        }
+        return {
+          ...log,
+          subscriber_name: subscriber?.name || "N/A",
+          subscriber_phone: subscriber?.phone_number || log.subscriber_id || "N/A",
+        };
+      });
+      return {
+        message_id: msg.id,
+        message_text: msg.body,
+        sent_at: msg.sent_at,
+        logs: msgLogs,
+      };
+    });
+    filteredMessages = messages;
+    messageDropdownOptions = messages.map((msg: any) => ({
+      value: msg.message_text,
+      label: msg.message_text,
+      date: msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : "",
+    }));
+  } else if (direction === 'inbound') {
+    const inboundLogs = logs.filter((log: any) => log.direction === 'inbound').map((log: any) => {
+      let subscriber = null;
+      if (subscribersData) {
+        subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+      }
+      return {
+        ...log,
+        name: subscriber?.name || log.name || "",
+        phone_number: subscriber?.phone_number || log.phone_number || "",
+      };
+    });
+    const grouped: Record<string, any> = {};
+    inboundLogs.forEach((log: any) => {
+      if (log.status === 'pending') return;
+      if (!grouped[log.message_text]) {
+        grouped[log.message_text] = {
+          message_text: log.message_text,
+          logs: [],
+        };
+      }
+      grouped[log.message_text].logs.push(log);
+    });
+    filteredMessages = Object.values(grouped);
+    messageDropdownOptions = Object.values(grouped).map((msg: any) => ({
+      value: msg.message_text,
+      label: msg.message_text,
+      date: '',
+    }));
+  }
 
-  const logs = logsData?.logs || [];
-  const pagination = logsData?.pagination || { page: 1, totalPages: 1, total: 0 };
+  // Aggregate logs by message_id, join with subscribers for name/phone
+  let messages: any[] = [];
+  if (messagesData) {
+    messages = messagesData.map((msg: any) => {
+      const msgLogs = logs.filter((log: any) => log.message_id === msg.id).map((log: any) => {
+        let subscriber = null;
+        if (subscribersData) {
+          subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+        }
+        return {
+          ...log,
+          subscriber_name: subscriber?.name || "N/A",
+          subscriber_phone: subscriber?.phone_number || log.subscriber_id || "N/A",
+        };
+      });
+      return {
+        message_id: msg.id,
+        message_text: msg.body,
+        sent_at: msg.sent_at,
+        logs: msgLogs,
+      };
+    });
+  } else {
+    // For inbound, aggregate by message_text, group all inbound logs
+    const inboundLogs = logs.filter((log: any) => log.direction === 'inbound').map((log: any) => {
+      let subscriber = null;
+      if (subscribersData) {
+        subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+      }
+      return {
+        ...log,
+        name: subscriber?.name || log.name || "",
+        phone_number: subscriber?.phone_number || log.phone_number || "",
+      };
+    });
+    const grouped: Record<string, any> = {};
+    inboundLogs.forEach((log: any) => {
+      // Only include logs with a final status (not pending)
+      if (log.status === 'pending') return;
+      if (!grouped[log.message_text]) {
+        grouped[log.message_text] = {
+          message_text: log.message_text,
+          logs: [],
+        };
+      }
+      grouped[log.message_text].logs.push(log);
+    });
+    filteredMessages = Object.values(grouped);
+  }
 
-  const handleViewLog = (log: DeliveryLog & { subscriber: Subscriber | null }) => {
-    setSelectedLog(log);
-    setLogDetailOpen(true);
-  };
+  // Filter by message content
+  if (filterText && filterText !== "all") {
+    filteredMessages = filteredMessages.filter((msg: any) => msg.message_text === filterText);
+  }
 
-  const handlePreviousPage = () => {
-    if (page > 1) setPage(page - 1);
-  };
-
-  const handleNextPage = () => {
-    if (page < pagination.totalPages) setPage(page + 1);
-  };
+  // Filter by status
+  if (filterStatus && filterStatus !== "all") {
+    filteredMessages = filteredMessages.filter((msg: any) =>
+      msg.logs.some((log: any) => log.status === filterStatus)
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Filters and Search */}
-      <div className="bg-background border-b border-border p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder="Search by message or phone number..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1); // Reset to first page on search
-              }}
-              className="pl-10"
-              data-testid="search-input"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Select value={statusFilter} onValueChange={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}>
-              <SelectTrigger className="w-32" data-testid="status-filter">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={dateFilter} onValueChange={(value) => {
-              setDateFilter(value);
-              setPage(1);
-            }}>
-              <SelectTrigger className="w-32" data-testid="date-filter">
-                <SelectValue placeholder="All Time" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All Time</SelectItem>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Stats Summary */}
-        {stats && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-secondary rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-foreground" data-testid="stat-total">
-                {stats?.totalSent || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Total Sent</div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="stat-delivered">
-                {stats?.delivered || 0}
-              </div>
-              <div className="text-sm text-green-600 dark:text-green-400">Delivered</div>
-            </div>
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-red-700 dark:text-red-400" data-testid="stat-failed">
-                {stats?.failed || 0}
-              </div>
-              <div className="text-sm text-red-600 dark:text-red-400">Failed</div>
-            </div>
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400" data-testid="stat-pending">
-                {stats?.pending || 0}
-              </div>
-              <div className="text-sm text-yellow-600 dark:text-yellow-400">Pending</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Logs Table */}
-      <div className="flex-1 overflow-x-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-muted-foreground">Loading logs...</div>
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <div className="text-lg font-medium text-muted-foreground mb-2">No logs found</div>
-              <div className="text-sm text-muted-foreground">
-                {search || statusFilter || dateFilter 
-                  ? "Try adjusting your filters" 
-                  : "Send your first message to see delivery logs here"
-                }
-              </div>
-            </div>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-muted border-b border-border sticky top-0">
-              <tr>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Timestamp
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Message
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Phone Number
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Status
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Telnyx ID
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-muted-foreground text-sm">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {logs.map((log: DeliveryLog & { subscriber: Subscriber | null }) => (
-                <tr 
-                  key={log.id} 
-                  className="hover:bg-muted/50"
-                  data-testid={`log-row-${log.id}`}
-                >
-                  <td className="py-3 px-4 text-sm" data-testid="log-timestamp">
-                    {log.updated_at ? formatTimestamp(log.updated_at) : 'Unknown'}
-                  </td>
-                  <td className="py-3 px-4 text-sm">
-                    <div 
-                      className="max-w-xs truncate text-foreground" 
-                      title={log.message_text || ''}
-                      data-testid="log-message"
-                    >
-                      {log.message_text || 'No message text'}
+    <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-8 px-2">
+      <Card className="w-full max-w-full mx-auto">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 mb-6 w-full">
+            <div className="flex flex-row gap-4 w-full">
+              <Select
+                value={direction}
+                onValueChange={(v) => {
+                  setDirection(v as 'outbound' | 'inbound');
+                  setFilterText('all'); // Clear message filter when direction changes
+                }}
+              >
+                <SelectTrigger className="w-40 h-12 text-base bg-muted rounded-2xl px-4">
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterText} onValueChange={setFilterText}>
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                  <SelectValue placeholder="Filter by message" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <div className="flex justify-between items-center w-full">
+                      <span>All Messages</span>
                     </div>
-                  </td>
-                  <td className="py-3 px-4 text-sm font-mono text-foreground" data-testid="log-phone">
-                    {log.subscriber ? formatPhoneNumber(log.subscriber.phone_number) : 'Unknown'}
-                  </td>
-                  <td className="py-3 px-4" data-testid="log-status">
-                    <StatusBadge status={log.status || 'unknown'} />
-                  </td>
-                  <td className="py-3 px-4 text-sm font-mono text-muted-foreground" data-testid="log-telnyx-id">
-                    {log.telnyx_message_id ? (
-                      <span className="truncate block max-w-32" title={log.telnyx_message_id}>
-                        {log.telnyx_message_id}
-                      </span>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewLog(log)}
-                      data-testid={`button-view-${log.id}`}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="bg-background border-t border-border p-4 flex justify-between items-center">
-          <div className="text-sm text-muted-foreground" data-testid="pagination-info">
-            Showing {((page - 1) * limit) + 1}-{Math.min(page * limit, pagination.total)} of {pagination.total} logs
+                  </SelectItem>
+                  {messageDropdownOptions.map((opt, idx) => (
+                    <SelectItem key={idx} value={opt.value}>
+                      <div className="flex items-center w-full">
+                        <span className="truncate max-w-[1200px]">{opt.label}</span>
+                        <span className="flex-1" />
+                        <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">{opt.date}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePreviousPage}
-              disabled={page <= 1}
-              data-testid="button-previous-page"
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={page >= pagination.totalPages}
-              data-testid="button-next-page"
-            >
-              Next
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
+          <div className="bg-background rounded-xl shadow-md w-full overflow-x-auto" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {isLoading || isMessagesLoading ? (
+              <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
+            ) : filteredMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-muted-foreground">No messages found.</div>
+            ) : direction === 'outbound' ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">Sent At</TableHead>
+                    {/* Dynamic status columns */}
+                    {statusOptions.map((status, idx) => (
+                      <TableHead key={idx} className="text-base font-semibold text-center text-foreground">
+                        {String(status).charAt(0).toUpperCase() + String(status).slice(1)}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-base font-semibold text-center text-foreground">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMessages.map((msg: any) => {
+                    const msgLogs = Array.isArray(msg.logs) ? msg.logs : [];
+                    const statusCounts = statusOptions.reduce((acc: Record<string, number>, status) => {
+                      acc[String(status)] = msgLogs.reduce((count: number, log: any) => count + (String(log.status) === String(status) ? 1 : 0), 0);
+                      return acc;
+                    }, {});
+                    return (
+                      <>
+                        <TableRow key={msg.message_id}>
+                          <TableCell className="w-[45%] truncate text-base">{msg.message_text}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{msg.sent_at ? new Date(msg.sent_at).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                          }) : ''}</TableCell>
+                          {/* Dynamic status counts */}
+                          {statusOptions.map((status, idx) => (
+                            <TableCell key={idx} className="text-center font-semibold text-base text-foreground">
+                              {statusCounts[String(status)]}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-center">
+                            <Button size="sm" variant="outline" onClick={() => setExpandedMsgId(expandedMsgId === msg.message_id ? null : msg.message_id)}>
+                              <Eye className="w-4 h-4 mr-1" />
+                              {expandedMsgId === msg.message_id ? "Hide" : "Details"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {expandedMsgId === msg.message_id && (
+                          <TableRow>
+                            <TableCell colSpan={3 + statusOptions.length} className="p-0 border-none">
+                              <div className="flex justify-center items-center py-4">
+                                <div className="w-full flex justify-center">
+                                  <div
+                                    className="rounded-2xl bg-gray-100 text-foreground border border-primary/20 shadow-lg p-6"
+                                    style={{ maxWidth: '98%', width: '98%', padding: '15px' }}
+                                  >
+                                    <h3 className="text-lg font-semibold mb-4 text-primary">Delivery Details</h3>
+                                    <Table className="w-full">
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="text-base font-semibold text-foreground">Name</TableHead>
+                                          <TableHead className="text-base font-semibold text-foreground">Phone Number</TableHead>
+                                          <TableHead className="text-base font-semibold text-center text-foreground">Sent At</TableHead>
+                                          <TableHead className="text-base font-semibold text-center text-foreground">Status</TableHead>
+                                          <TableHead className="text-base font-semibold text-center text-foreground">Retry</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {msgLogs.map((log: any) => (
+                                          <TableRow key={log.id} className="hover:bg-gray-200">
+                                            <TableCell className="font-normal">{log.subscriber_name}</TableCell>
+                                            <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(log.subscriber_phone) : log.subscriber_phone}</TableCell>
+                                            <TableCell className="text-center font-normal">{log.updated_at ? new Date(log.updated_at).toLocaleString(undefined, {
+                                              month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                                            }) : ''}</TableCell>
+                                            <TableCell className="text-center font-normal">{log.status ? log.status.replace(/(^|\s)[a-z]/g, (c: string) => c.toUpperCase()) : ""}</TableCell>
+                                            <TableCell className="text-center font-normal">
+                                              <Button
+                                                size="sm"
+                                                variant={log.status === "failed" ? "destructive" : "outline"}
+                                                className={log.status === "failed" ? "bg-red-500 text-white" : "bg-gray-300 text-gray-700"}
+                                                disabled={log.status !== "failed"}
+                                                onClick={async () => {
+                                                  try {
+                                                    await fetch("/api/retry-message", {
+                                                      method: "POST",
+                                                      headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({
+                                                        message_id: log.message_id,
+                                                        phone_number: log.subscriber_phone,
+                                                      }),
+                                                    });
+                                                    alert("Retry sent!");
+                                                  } catch (err) {
+                                                    alert("Retry failed.");
+                                                  }
+                                                }}
+                                              >
+                                                <RotateCcw className="w-4 h-4 mr-1" /> Retry
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">Name</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">Phone Number</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">Received At</TableHead>
+                    <TableHead className="text-base font-semibold text-center text-foreground">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMessages.map((msg: any) => {
+                    const msgLogs = Array.isArray(msg.logs) ? msg.logs : [];
+                    const receivedAt = msgLogs.length > 0 ? new Date(Math.max(...msgLogs.map((log: any) => new Date(log.updated_at).getTime()))).toLocaleString(undefined, {
+                      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                    }) : '';
+                    const firstLog = msgLogs[0] || {};
+                    return (
+                      <TableRow key={msg.message_text}>
+                        <TableCell className="w-[45%] truncate text-base">{msg.message_text}</TableCell>
+                        <TableCell className="text-base">{firstLog.name}</TableCell>
+                        <TableCell className="text-base">{formatPhoneNumber ? formatPhoneNumber(firstLog.phone_number) : firstLog.phone_number}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{receivedAt}</TableCell>
+                        <TableCell className="text-center font-normal text-base text-foreground">
+                          {firstLog.status ? firstLog.status.charAt(0).toUpperCase() + firstLog.status.slice(1) : ""}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Log Detail Modal */}
-      <LogDetailModal
-        open={logDetailOpen}
-        onOpenChange={setLogDetailOpen}
-        log={selectedLog}
-      />
+        </CardContent>
+      </Card>
     </div>
   );
 }

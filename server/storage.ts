@@ -297,7 +297,11 @@ export class FallbackStorage implements IStorage {
       console.error('Supabase error (getDeliveryLogs):', error);
       return { logs: [], total: 0 };
     }
-    return { logs: data ?? [], total: count ?? 0 };
+    // Patch: Always return logs and pagination in expected format
+    return {
+      logs: data ?? [],
+      total: count ?? 0
+    };
   }
 
   async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog | undefined> {
