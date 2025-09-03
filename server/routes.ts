@@ -264,6 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Telnyx webhook endpoint for delivery status updates
   app.post("/api/webhooks/telnyx", async (req, res) => {
     try {
+      console.log('Telnyx webhook received:', JSON.stringify(req.body, null, 2));
       const { data } = req.body;
       // Handle delivery status updates
       if (data && data.event_type === "message.finalized") {
