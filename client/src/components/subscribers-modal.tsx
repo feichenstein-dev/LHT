@@ -159,8 +159,15 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                     data-testid={`subscriber-${subscriber.id}`}
                   >
                     <div className="flex-1">
-                      <div className="font-medium" data-testid="subscriber-phone">
-                        {subscriber.name ? `${subscriber.name} — ` : ''}{formatPhoneNumber(subscriber.phone_number)}
+                      <div className="font-medium flex items-center gap-2" data-testid="subscriber-phone">
+                        {subscriber.name && (
+                          <span className="rounded bg-gray-100 px-2 py-1 text-gray-800 font-semibold text-sm">
+                            {subscriber.name}
+                          </span>
+                        )}
+                        <span className="text-gray-500 text-sm tracking-wide">
+                          {formatPhoneNumber(subscriber.phone_number)}
+                        </span>
                       </div>
                       <div className="text-sm text-muted-foreground" data-testid="subscriber-join-date">
                         Joined {formatJoinDate(subscriber.joined_at ? subscriber.joined_at.toString() : '')}

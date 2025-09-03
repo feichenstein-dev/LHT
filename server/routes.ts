@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import * as storageModule from "./storage";
+const storage = storageModule.storage;
 import { insertMessageSchema, insertSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -285,17 +286,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Handle inbound SMS for joining
       if (data && data.event_type === "message.received") {
-        const { from, text } = data.payload;
-        // Check for JOIN command (case-insensitive)
+  const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
+        const text = data.payload.text;
         const joinMatch = text.match(/^join(.*)$/i);
+        const stopMatch = text.match(/^stop$/i);
         let name: string | null = null;
+        const apiKey = process.env.TELNYX_API_KEY;
+        const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
         if (joinMatch) {
           name = joinMatch[1].trim();
           if (name === "") name = null;
           const existing = await storage.getSubscriberByPhone(from);
           if (!existing) {
             await storage.createSubscriber({ phone_number: from, name });
-            // Optionally, send a welcome message back via Telnyx here
+          } else {
+            // If name is provided and different, update name and updated_at
+            if (name && name !== existing.name) {
+              const now = new Date().toISOString();
+              // Use Supabase directly to update
+              await storageModule.supabase
+                .from('subscribers')
+                .update({ name, updated_at: now })
+                .eq('id', existing.id);
+            }
+            // If status is not active, reactivate
+            if (existing.status !== 'active') {
+              const now = new Date().toISOString();
+              await storageModule.supabase
+                .from('subscribers')
+                .update({ status: 'active', updated_at: now })
+                .eq('id', existing.id);
+            }
+          }
+          // Send welcome/help message
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`
+            } as any);
+          }
+        }
+        if (text.match(/^help$/i)) {
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`
+            } as any);
+          }
+        }
+        if (stopMatch) {
+          const existing = await storage.getSubscriberByPhone(from);
+          if (existing && existing.status === 'active') {
+            await storage.deleteSubscriber(existing.id);
+            // Send confirmation
+            if (apiKey && telnyxNumber) {
+              const telnyxClient = new Telnyx(apiKey);
+              await telnyxClient.messages.create({
+                from: telnyxNumber,
+                to: from,
+                text: `You have been unsubscribed. Reply JOIN with your name to subscribe again.`
+              } as any);
+            }
           }
         }
       }

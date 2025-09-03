@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 
 // Supabase client is now used for all database operations
+export { supabase };
 
 export interface IStorage {
   // Messages

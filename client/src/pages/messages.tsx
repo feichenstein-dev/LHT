@@ -36,26 +36,20 @@ export default function Messages() {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
-      // Fetch delivery logs for this message
-      const logsRes = await apiRequest("GET", `/api/delivery-logs?message_id=${data.message.id}`);
-      const logs = await logsRes.json();
-      const delivered = logs.logs.filter((l: any) => l.status === 'delivered').length;
-      const failed = logs.logs.filter((l: any) => l.status === 'failed').length;
-      window.alert(`Message sent to ${delivered} contacts, failed to send to ${failed} contacts`);
+      // Optionally, you can add non-intrusive feedback here (e.g., a status bar or toast)
     },
     onError: (error: any) => {
-      window.alert(error.message || "Failed to send message");
+      // Optionally, you can add non-intrusive error feedback here
     },
   });
 
   const handleSendMessage = () => {
     if (!messageText.trim()) return;
-    
+    // Optionally, you can add non-intrusive feedback here if no subscribers
     if (subscribers.length === 0) {
-      window.alert("Add subscribers before sending messages");
+      // No popup
       return;
     }
-
     sendMessageMutation.mutate(messageText);
   };
 
@@ -124,10 +118,6 @@ export default function Messages() {
                       })
                     : ''
                 }
-                deliveryInfo={{
-                  count: activeSubscribers.length,
-                  status: 'delivered', // This would come from delivery logs in a real implementation
-                }}
               />
             ))
           )}
