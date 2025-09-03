@@ -142,6 +142,10 @@ type Toast = Omit<ToasterToast, "id">
 function toast({ ...props }: Toast) {
   const id = genId()
 
+  // Fallback debug: log and alert when toast is called
+  console.log('Toast called:', props)
+  alert(`Toast: ${props.title || ''} - ${props.description || ''}`)
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",

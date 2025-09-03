@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+// ...removed useToast import...
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/ui/message-bubble";
 import { SubscribersModal } from "@/components/subscribers-modal";
-import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimestamp } from "@/lib/supabase";
 import { Send, Users } from "lucide-react";
@@ -15,11 +15,12 @@ export default function Messages() {
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+  // ...removed toast usage...
   const queryClient = useQueryClient();
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages"],
+    select: (msgs) => [...msgs].sort((a, b) => new Date(a.sent_at || '').getTime() - new Date(b.sent_at || '').getTime()),
   });
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
@@ -31,31 +32,19 @@ export default function Messages() {
       const response = await apiRequest("POST", "/api/messages", { body });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
-      
-      const { delivery } = data;
-      if (delivery.failed > 0) {
-        toast({
-          title: "Partially Sent",
-          description: `Message sent to ${delivery.sent} contacts, failed to send to ${delivery.failed} contacts`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: `Message sent to ${delivery.sent} contacts!`,
-        });
-      }
+      // Fetch delivery logs for this message
+      const logsRes = await apiRequest("GET", `/api/delivery-logs?message_id=${data.message.id}`);
+      const logs = await logsRes.json();
+      const delivered = logs.logs.filter((l: any) => l.status === 'delivered').length;
+      const failed = logs.logs.filter((l: any) => l.status === 'failed').length;
+      window.alert(`Message sent to ${delivered} contacts, failed to send to ${failed} contacts`);
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
-        variant: "destructive",
-      });
+      window.alert(error.message || "Failed to send message");
     },
   });
 
@@ -63,11 +52,7 @@ export default function Messages() {
     if (!messageText.trim()) return;
     
     if (subscribers.length === 0) {
-      toast({
-        title: "No Subscribers",
-        description: "Add subscribers before sending messages",
-        variant: "destructive",
-      });
+      window.alert("Add subscribers before sending messages");
       return;
     }
 
@@ -127,7 +112,18 @@ export default function Messages() {
               <MessageBubble
                 key={message.id}
                 message={message.body}
-                timestamp={formatTimestamp(message.sent_at ? message.sent_at.toString() : '')}
+                timestamp={
+                  message.sent_at
+                    ? new Date(message.sent_at).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : ''
+                }
                 deliveryInfo={{
                   count: activeSubscribers.length,
                   status: 'delivered', // This would come from delivery logs in a real implementation

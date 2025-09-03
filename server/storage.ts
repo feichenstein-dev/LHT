@@ -1,14 +1,11 @@
 import { supabase } from "./lib/supabase";
-import { 
-  type Message, 
-  type Subscriber, 
-  type DeliveryLog, 
-  type InsertMessage, 
-  type InsertSubscriber, 
-  type InsertDeliveryLog,
-  messages,
-  subscribers,
-  delivery_logs 
+import {
+  type Message,
+  type Subscriber,
+  type DeliveryLog,
+  type InsertMessage,
+  type InsertSubscriber,
+  type InsertDeliveryLog
 } from "@shared/schema";
 
 // Supabase client is now used for all database operations
@@ -16,13 +13,13 @@ import {
 export interface IStorage {
   // Messages
   getMessages(): Promise<Message[]>;
-  createMessage(message: InsertMessage): Promise<Message>;
+  createMessage(message: InsertMessage): Promise<Message | undefined>;
   getMessageById(id: string): Promise<Message | undefined>;
 
   // Subscribers
   getSubscribers(): Promise<Subscriber[]>;
   getActiveSubscribers(): Promise<Subscriber[]>;
-  createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber>;
+  createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber | undefined>;
   deleteSubscriber(id: string): Promise<void>;
   getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined>;
 
@@ -34,7 +31,7 @@ export interface IStorage {
     limit?: number;
     offset?: number;
   }): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }>;
-  createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog>;
+  createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog | undefined>;
   updateDeliveryLogStatus(id: string, status: string, telnyxMessageId?: string): Promise<void>;
   getDeliveryStats(): Promise<{
     totalSent: number;
@@ -43,6 +40,8 @@ export interface IStorage {
     pending: number;
   }>;
 }
+
+
 
 class MemoryStorage implements IStorage {
   private messages: Message[] = [];
@@ -53,7 +52,7 @@ class MemoryStorage implements IStorage {
     return this.messages.sort((a, b) => new Date(b.sent_at || '').getTime() - new Date(a.sent_at || '').getTime());
   }
 
-  async createMessage(message: InsertMessage): Promise<Message> {
+  async createMessage(message: InsertMessage): Promise<Message | undefined> {
     const newMessage: Message = {
       id: crypto.randomUUID(),
       body: message.body,
@@ -72,213 +71,61 @@ class MemoryStorage implements IStorage {
   }
 
   async getActiveSubscribers(): Promise<Subscriber[]> {
-    export class DatabaseStorage implements IStorage {
-      async getMessages(): Promise<Message[]> {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .order('sent_at', { ascending: false });
-        if (error) throw error;
-        return data || [];
-      }
+    return this.subscribers.filter(s => s.status === 'active');
+  }
 
-      async createMessage(message: InsertMessage): Promise<Message> {
-        const { data, error } = await supabase
-          .from('messages')
-          .insert([message])
-          .select();
-        if (error) throw error;
-        return data ? data[0] : null;
-      }
-
-      async getMessageById(id: string): Promise<Message | undefined> {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('id', id)
-          .single();
-        if (error) throw error;
-        return data || undefined;
-      }
-
-      async getSubscribers(): Promise<Subscriber[]> {
-        const { data, error } = await supabase
-          .from('subscribers')
-          .select('*')
-          .order('joined_at', { ascending: false });
-        if (error) throw error;
-        return data || [];
-      }
-
-      async getActiveSubscribers(): Promise<Subscriber[]> {
-        const { data, error } = await supabase
-          .from('subscribers')
-          .select('*')
-          .eq('status', 'active');
-        if (error) throw error;
-        return data || [];
-      }
-
-      async createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber> {
-        const { data, error } = await supabase
-          .from('subscribers')
-          .insert([subscriber])
-          .select();
-        if (error) throw error;
-        return data ? data[0] : null;
-      }
-
-      async deleteSubscriber(id: string): Promise<void> {
-        const { error } = await supabase
-          .from('subscribers')
-          .delete()
-          .eq('id', id);
-        if (error) throw error;
-      }
-
-      async getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined> {
-        const { data, error } = await supabase
-          .from('subscribers')
-          .select('*')
-          .eq('phone_number', phoneNumber)
-          .single();
-        if (error) throw error;
-        return data || undefined;
-      }
-
-      async getDeliveryLogs(filters: {
-        search?: string;
-        status?: string;
-        dateRange?: string;
-        limit?: number;
-        offset?: number;
-      } = {}): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }> {
-        const { search, status, limit = 10, offset = 0 } = filters;
-        let query = supabase
-          .from('delivery_logs')
-          .select('*,subscriber:subscribers(*)', { count: 'exact' })
-          .order('updated_at', { ascending: false })
-          .range(offset, offset + limit - 1);
-        if (search) {
-          query = query.ilike('message_text', `%${search}%`);
-        }
-        if (status) {
-          query = query.eq('status', status);
-        }
-        const { data, error, count } = await query;
-        if (error) throw error;
-        return { logs: data || [], total: count || 0 };
-      }
-
-      async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog> {
-        const { data, error } = await supabase
-          .from('delivery_logs')
-          .insert([log])
-          .select();
-        if (error) throw error;
-        return data ? data[0] : null;
-      }
-
-      async updateDeliveryLogStatus(id: string, status: string, telnyxMessageId?: string): Promise<void> {
-        const updateData: any = { status, updated_at: new Date().toISOString() };
-        if (telnyxMessageId) {
-          updateData.telnyx_message_id = telnyxMessageId;
-        }
-        const { error } = await supabase
-          .from('delivery_logs')
-          .update(updateData)
-          .eq('id', id);
-        if (error) throw error;
-      }
-
-      async getDeliveryStats(): Promise<{
-        totalSent: number;
-        delivered: number;
-        failed: number;
-        pending: number;
-      }> {
-        const { data, error } = await supabase
-          .from('delivery_logs')
-          .select('status');
-        if (error) throw error;
-        const stats = { totalSent: 0, delivered: 0, failed: 0, pending: 0 };
-        if (data) {
-          stats.totalSent = data.length;
-          stats.delivered = data.filter((l: any) => l.status === 'delivered').length;
-          stats.failed = data.filter((l: any) => l.status === 'failed').length;
-          stats.pending = data.filter((l: any) => ['pending', 'sent'].includes(l.status)).length;
-        }
-        return stats;
-      }
-    }
-  // ...existing code...
-      .insert([subscriber])
-      .select();
-    if (error) throw error;
-    return data ? data[0] : null;
+  async createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber | undefined> {
+    const newSubscriber: Subscriber = {
+      id: crypto.randomUUID(),
+      phone_number: subscriber.phone_number,
+      name: subscriber.name ?? null,
+      status: subscriber.status ?? 'active',
+      joined_at: new Date(),
+    };
+    this.subscribers.push(newSubscriber);
+    return newSubscriber;
   }
 
   async deleteSubscriber(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('subscribers')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
+    this.subscribers = this.subscribers.filter(s => s.id !== id);
   }
 
   async getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined> {
-    const { data, error } = await supabase
-      .from('subscribers')
-      .select('*')
-      .eq('phone_number', phoneNumber)
-      .single();
-    if (error) throw error;
-    return data || undefined;
+    return this.subscribers.find(s => s.phone_number === phoneNumber);
   }
 
-  async getDeliveryLogs(filters: {
+  async getDeliveryLogs(filters?: {
     search?: string;
     status?: string;
     dateRange?: string;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }> {
-    const { search, status, limit = 10, offset = 0 } = filters;
-    let query = supabase
-      .from('delivery_logs')
-      .select('*,subscriber:subscribers(*)')
-      .order('updated_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (search) {
-      query = query.ilike('message_text', `%${search}%`);
-    }
-    if (status) {
-      query = query.eq('status', status);
-    }
-    const { data, error, count } = await query;
-    if (error) throw error;
-    return { logs: data || [], total: count || 0 };
+  }): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }> {
+    return { logs: this.deliveryLogs, total: this.deliveryLogs.length };
   }
 
-  async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog> {
-    const { data, error } = await supabase
-      .from('delivery_logs')
-      .insert([log])
-      .select();
-    if (error) throw error;
-    return data ? data[0] : null;
+  async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog | undefined> {
+    const newLog: DeliveryLog = {
+      id: crypto.randomUUID(),
+      status: log.status ?? null,
+      message_id: log.message_id ?? null,
+      subscriber_id: log.subscriber_id ?? null,
+      telnyx_message_id: log.telnyx_message_id ?? null,
+      updated_at: new Date(),
+      direction: log.direction ?? null,
+      message_text: log.message_text ?? null,
+    };
+    this.deliveryLogs.push({ ...newLog, subscriber: null });
+    return newLog;
   }
 
   async updateDeliveryLogStatus(id: string, status: string, telnyxMessageId?: string): Promise<void> {
-    const updateData: any = { status, updated_at: new Date().toISOString() };
-    if (telnyxMessageId) {
-      updateData.telnyx_message_id = telnyxMessageId;
+    const log = this.deliveryLogs.find(l => l.id === id);
+    if (log) {
+      log.status = status;
+      log.updated_at = new Date();
+      if (telnyxMessageId) log.telnyx_message_id = telnyxMessageId;
     }
-    const { error } = await supabase
-      .from('delivery_logs')
-      .update(updateData)
-      .eq('id', id);
-    if (error) throw error;
   }
 
   async getDeliveryStats(): Promise<{
@@ -287,126 +134,193 @@ class MemoryStorage implements IStorage {
     failed: number;
     pending: number;
   }> {
-    const { data, error } = await supabase
-      .from('delivery_logs')
-      .select('status');
-    if (error) throw error;
     const stats = { totalSent: 0, delivered: 0, failed: 0, pending: 0 };
-    if (data) {
-      stats.totalSent = data.length;
-      stats.delivered = data.filter((l: any) => l.status === 'delivered').length;
-      stats.failed = data.filter((l: any) => l.status === 'failed').length;
-      stats.pending = data.filter((l: any) => ['pending', 'sent'].includes(l.status)).length;
-    }
+    stats.totalSent = this.deliveryLogs.length;
+    stats.delivered = this.deliveryLogs.filter(l => l.status === 'delivered').length;
+    stats.failed = this.deliveryLogs.filter(l => l.status === 'failed').length;
+    stats.pending = this.deliveryLogs.filter(l => l.status === 'pending' || l.status === 'sent').length;
     return stats;
   }
 }
 
-class FallbackStorage implements IStorage {
-  private dbStorage = new DatabaseStorage();
+export class FallbackStorage implements IStorage {
   private memoryStorage = new MemoryStorage();
-  private useMemory = false;
-
-  private async tryDatabase<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.useMemory) {
-      throw new Error("Database unavailable, using memory storage");
-    }
-    
-    try {
-      return await operation();
-    } catch (error) {
-      console.log("Database error, switching to memory storage:", error);
-      this.useMemory = true;
-      throw error;
-    }
-  }
 
   async getMessages(): Promise<Message[]> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getMessages());
-    } catch {
-      return await this.memoryStorage.getMessages();
+    // Fetch messages from Supabase
+    const { data, error } = await supabase.from('messages').select('*');
+    if (error) {
+      console.error('Supabase error (getMessages):', error);
+      return [];
     }
+    return data ?? [];
   }
 
-  async createMessage(message: InsertMessage): Promise<Message> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.createMessage(message));
-    } catch {
-      return await this.memoryStorage.createMessage(message);
+  async createMessage(message: InsertMessage): Promise<Message | undefined> {
+    // Store message in Supabase
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('messages')
+      .insert([
+        {
+          body: message.body,
+          sent_at: now,
+        },
+      ])
+      .select('*')
+      .single();
+    if (error) {
+      console.error('Supabase error (createMessage):', error);
+      return undefined;
     }
+    return data;
   }
 
   async getMessageById(id: string): Promise<Message | undefined> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getMessageById(id));
-    } catch {
-      return await this.memoryStorage.getMessageById(id);
-    }
+    return await this.memoryStorage.getMessageById(id);
   }
 
   async getSubscribers(): Promise<Subscriber[]> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getSubscribers());
-    } catch {
-      return await this.memoryStorage.getSubscribers();
+    // Fetch subscribers from Supabase
+    const { data, error } = await supabase.from('subscribers').select('*');
+  console.log('SERVER LOG: Supabase getSubscribers response:', { data, error });
+    if (error) {
+      console.error('Supabase error:', error);
+      return [];
     }
+    return data ?? [];
   }
 
   async getActiveSubscribers(): Promise<Subscriber[]> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getActiveSubscribers());
-    } catch {
-      return await this.memoryStorage.getActiveSubscribers();
+    // Fetch active subscribers from Supabase
+    const { data, error } = await supabase
+      .from('subscribers')
+      .select('*')
+      .eq('status', 'active');
+    if (error) {
+      console.error('Supabase error (getActiveSubscribers):', error);
+      return [];
     }
+    return data ?? [];
   }
 
-  async createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.createSubscriber(subscriber));
-    } catch {
-      return await this.memoryStorage.createSubscriber(subscriber);
+  async createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber | undefined> {
+    // If subscriber exists, update status to 'active' and updated_at
+    const now = new Date().toISOString();
+    const { data: existing, error: findError } = await supabase
+      .from('subscribers')
+      .select('*')
+      .eq('phone_number', subscriber.phone_number)
+      .single();
+    if (findError && findError.code !== 'PGRST116') {
+      // PGRST116 = No rows found
+      console.error('Supabase error (findSubscriber):', findError);
+      return undefined;
+    }
+    if (existing) {
+      // Update status and updated_at
+      const { data, error } = await supabase
+        .from('subscribers')
+        .update({ status: 'active', updated_at: now })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Supabase error (updateSubscriber):', error);
+        return undefined;
+      }
+      return data;
+    } else {
+      // Insert new subscriber
+      const { data, error } = await supabase
+        .from('subscribers')
+        .insert([
+          {
+            ...subscriber,
+            status: 'active',
+            updated_at: now,
+          },
+        ])
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Supabase error (createSubscriber):', error);
+        return undefined;
+      }
+      return data;
     }
   }
 
   async deleteSubscriber(id: string): Promise<void> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.deleteSubscriber(id));
-    } catch {
-      return await this.memoryStorage.deleteSubscriber(id);
+    // Set status to 'inactive' and update 'updated_at' (do not delete row)
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('subscribers')
+      .update({ status: 'inactive', updated_at: now })
+      .eq('id', id);
+    if (error) {
+      console.error('Supabase error (deleteSubscriber):', error);
     }
   }
 
   async getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getSubscriberByPhone(phoneNumber));
-    } catch {
-      return await this.memoryStorage.getSubscriberByPhone(phoneNumber);
+    // Fetch subscriber from Supabase
+    const { data, error } = await supabase
+      .from('subscribers')
+      .select('*')
+      .eq('phone_number', phoneNumber)
+      .single();
+    if (error && error.code !== 'PGRST116') {
+      console.error('Supabase error (getSubscriberByPhone):', error);
+      return undefined;
     }
+    return data ?? undefined;
   }
 
-  async getDeliveryLogs(filters?: any): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getDeliveryLogs(filters));
-    } catch {
-      return await this.memoryStorage.getDeliveryLogs(filters);
+  async getDeliveryLogs(filters?: {
+    search?: string;
+    status?: string;
+    dateRange?: string;
+    limit?: number;
+    offset?: number;
+    message_id?: string;
+  }): Promise<{ logs: (DeliveryLog & { subscriber: Subscriber | null })[], total: number }> {
+    let query = supabase.from('delivery_logs').select('*', { count: 'exact' });
+    if (filters?.status) query = query.eq('status', filters.status);
+    if (filters?.search) query = query.ilike('message_text', `%${filters.search}%`);
+    if (filters?.message_id) query = query.eq('message_id', filters.message_id);
+    if (filters?.limit) query = query.limit(filters.limit);
+    if (filters?.offset) query = query.range(filters.offset, (filters.offset || 0) + (filters.limit || 10) - 1);
+    const { data, error, count } = await query;
+    if (error) {
+      console.error('Supabase error (getDeliveryLogs):', error);
+      return { logs: [], total: 0 };
     }
+    return { logs: data ?? [], total: count ?? 0 };
   }
 
-  async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.createDeliveryLog(log));
-    } catch {
-      return await this.memoryStorage.createDeliveryLog(log);
+  async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog | undefined> {
+    // Allow status to be 'failed', 'sent', etc.
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('delivery_logs')
+      .insert([
+        {
+          ...log,
+          updated_at: now,
+        },
+      ])
+      .select('*')
+      .single();
+    if (error) {
+      console.error('Supabase error (createDeliveryLog):', error);
+      return undefined;
     }
+    return data;
   }
 
   async updateDeliveryLogStatus(id: string, status: string, telnyxMessageId?: string): Promise<void> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.updateDeliveryLogStatus(id, status, telnyxMessageId));
-    } catch {
-      return await this.memoryStorage.updateDeliveryLogStatus(id, status, telnyxMessageId);
-    }
+    return await this.memoryStorage.updateDeliveryLogStatus(id, status, telnyxMessageId);
   }
 
   async getDeliveryStats(): Promise<{
@@ -415,12 +329,9 @@ class FallbackStorage implements IStorage {
     failed: number;
     pending: number;
   }> {
-    try {
-      return await this.tryDatabase(() => this.dbStorage.getDeliveryStats());
-    } catch {
-      return await this.memoryStorage.getDeliveryStats();
-    }
+    return await this.memoryStorage.getDeliveryStats();
   }
 }
 
-export const storage = new FallbackStorage();
+// Export a default storage instance
+export const storage: IStorage = new FallbackStorage();

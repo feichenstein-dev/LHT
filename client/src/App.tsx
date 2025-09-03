@@ -1,7 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+// ...removed Toaster import...
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -68,11 +68,15 @@ function Router() {
   );
 }
 
+import { useEffect } from "react";
+// ...removed useToast import...
+
 function App() {
+  // ...existing code...
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
+  {/* ...removed Toaster component... */}
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

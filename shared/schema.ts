@@ -12,6 +12,7 @@ export const messages = pgTable("messages", {
 export const subscribers = pgTable("subscribers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   phone_number: text("phone_number").notNull().unique(),
+  name: text("name"),
   joined_at: timestamp("joined_at", { withTimezone: true }).default(sql`now()`),
   status: text("status").default("active"),
 });
