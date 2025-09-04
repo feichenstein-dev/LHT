@@ -31,6 +31,9 @@ export const delivery_logs = pgTable("delivery_logs", {
 export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   sent_at: true,
+}).extend({
+  current_active_subscribers: z.number().optional(), 
+  delivered_count: z.number().optional(), 
 });
 
 export const insertSubscriberSchema = createInsertSchema(subscribers).omit({
@@ -41,12 +44,22 @@ export const insertSubscriberSchema = createInsertSchema(subscribers).omit({
 export const insertDeliveryLogSchema = createInsertSchema(delivery_logs).omit({
   id: true,
   updated_at: true,
+}).extend({
+  name: z.string().nullable(),
+  phone_number: z.string().nullable(),
 });
 
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertSubscriber = z.infer<typeof insertSubscriberSchema>;
 export type InsertDeliveryLog = z.infer<typeof insertDeliveryLogSchema>;
 
-export type Message = typeof messages.$inferSelect;
+export type Message = typeof messages.$inferSelect & {
+  active_count?: number; // Added active_count field
+  delivered_count?: number; // Added delivered_count field
+  status?: 'delivered' | 'failed' | 'pending';
+};
 export type Subscriber = typeof subscribers.$inferSelect;
-export type DeliveryLog = typeof delivery_logs.$inferSelect;
+export type DeliveryLog = typeof delivery_logs.$inferSelect & {
+  name?: string | null;
+  phone_number?: string | null;
+};

@@ -1,5 +1,11 @@
 import { cn } from "@/lib/utils";
 
+// Utility function to calculate message length based on encoding
+const calculateMessageLength = (message: string): number => {
+  const isHebrew = /[\u0590-\u05FF]/.test(message);
+  return isHebrew ? message.length * 2 : message.length;
+};
+
 interface MessageBubbleProps {
   message: string;
   timestamp: string;
@@ -7,6 +13,9 @@ interface MessageBubbleProps {
     count: number;
     status: 'delivered' | 'failed' | 'pending';
   };
+  actions?: React.ReactNode;
+  activeCount?: number; // Added activeCount prop
+  deliveredCount?: number; // Added deliveredCount prop
   className?: string;
 }
 
@@ -14,8 +23,15 @@ export function MessageBubble({
   message, 
   timestamp, 
   deliveryInfo, 
+  actions, 
+  activeCount, // Added activeCount prop
+  deliveredCount, // Added deliveredCount prop
   className 
 }: MessageBubbleProps) {
+  const messageLength = calculateMessageLength(message);
+
+  console.log('MessageBubble Props:', { activeCount, deliveredCount });
+
   return (
     <div className="flex flex-col items-end">
       <div 
@@ -38,16 +54,10 @@ export function MessageBubble({
       {deliveryInfo && (
         <div className="flex items-center mt-1 space-x-1">
           <span 
-            className={cn(
-              "text-xs",
-              deliveryInfo.status === 'failed' ? "text-destructive" : "text-muted-foreground"
-            )}
+            className="text-xs text-muted-foreground"
             data-testid="delivery-info"
           >
-            {deliveryInfo.status === 'failed' 
-              ? `Failed to send to ${deliveryInfo.count} contacts`
-              : `Delivered to ${deliveryInfo.count} contacts`
-            }
+            {`Message delivery summary: ${deliveredCount || 0} delivered / ${activeCount || 0} current active subscribers`}
           </span>
           {deliveryInfo.status === 'delivered' && (
             <i className="fas fa-check-double text-xs text-green-500" />
@@ -55,6 +65,11 @@ export function MessageBubble({
           {deliveryInfo.status === 'failed' && (
             <i className="fas fa-exclamation-triangle text-xs text-destructive" />
           )}
+        </div>
+      )}
+      {actions && (
+        <div className="mt-2">
+          {actions}
         </div>
       )}
     </div>

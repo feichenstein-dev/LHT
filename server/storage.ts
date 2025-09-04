@@ -115,6 +115,8 @@ class MemoryStorage implements IStorage {
       updated_at: new Date(),
       direction: log.direction ?? null,
       message_text: log.message_text ?? null,
+      name: log.name ?? null,
+      phone_number: log.phone_number ?? null,
     };
     this.deliveryLogs.push({ ...newLog, subscriber: null });
     return newLog;
@@ -149,7 +151,7 @@ export class FallbackStorage implements IStorage {
 
   async getMessages(): Promise<Message[]> {
     // Fetch messages from Supabase
-    const { data, error } = await supabase.from('messages').select('*');
+    const { data, error } = await supabase.from('messages').select('*, current_active_subscribers, delivered_count');
     if (error) {
       console.error('Supabase error (getMessages):', error);
       return [];
@@ -160,20 +162,39 @@ export class FallbackStorage implements IStorage {
   async createMessage(message: InsertMessage): Promise<Message | undefined> {
     // Store message in Supabase
     const now = new Date().toISOString();
+
+    // Query active subscribers count
+    const { count: activeCount, error: activeError } = await supabase
+      .from('subscribers')
+      .select('*', { count: 'exact' })
+      .eq('status', 'active');
+
+    console.log('Active Subscribers Count:', activeCount, 'Error:', activeError);
+    const activeCountValue = activeCount || 0;
+
+    // Assume delivered count comes from Telnyx response (placeholder for now)
+    const deliveredCount = message.delivered_count || 0; // Replace with actual Telnyx response logic
+
+    console.log('Inserting message with activeCount:', activeCountValue);
+
     const { data, error } = await supabase
       .from('messages')
       .insert([
         {
           body: message.body,
           sent_at: now,
+          current_active_subscribers: activeCountValue, // Store active subscribers count
+          delivered_count: deliveredCount, // Store delivered count
         },
       ])
       .select('*')
       .single();
+
     if (error) {
       console.error('Supabase error (createMessage):', error);
       return undefined;
     }
+
     return data;
   }
 
@@ -305,22 +326,45 @@ export class FallbackStorage implements IStorage {
   }
 
   async createDeliveryLog(log: InsertDeliveryLog): Promise<DeliveryLog | undefined> {
-    // Allow status to be 'failed', 'sent', etc.
+    // Directly call the Supabase implementation
     const now = new Date().toISOString();
-    const { data, error } = await supabase
-      .from('delivery_logs')
-      .insert([
-        {
-          ...log,
-          updated_at: now,
-        },
-      ])
-      .select('*')
-      .single();
-    if (error) {
-      console.error('Supabase error (createDeliveryLog):', error);
+
+    // Ensure required fields are present
+    if (!log.direction || !log.message_text) {
+      console.error('Missing required fields for delivery log:', log);
       return undefined;
     }
+
+    // Prepare the data to match the schema
+    const logEntry = {
+      message_id: log.message_id ?? null,
+      subscriber_id: log.subscriber_id ?? null,
+      status: log.status ?? null,
+      telnyx_message_id: log.telnyx_message_id ?? null,
+      updated_at: now,
+      direction: log.direction,
+      message_text: log.message_text,
+      name: log.name ?? null,
+      phone_number: log.phone_number ?? null,
+    };
+
+    // Log the data being inserted for debugging
+    console.log('Data being inserted into delivery_logs:', JSON.stringify(logEntry, null, 2));
+
+    // Insert the log into the database
+    const { data, error } = await supabase
+      .from('delivery_logs')
+      .insert([logEntry])
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Supabase error (createDeliveryLog):', error);
+      console.error('Failed log data:', JSON.stringify(logEntry, null, 2));
+      return undefined;
+    }
+
+    console.log('Supabase response for delivery_logs:', JSON.stringify(data, null, 2));
     return data;
   }
 

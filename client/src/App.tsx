@@ -4,12 +4,13 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 // ...removed Toaster import...
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import Messages from "@/pages/messages";
 import Logs from "@/pages/logs";
 import NotFound from "@/pages/not-found";
 import { MessageCircle, List } from "lucide-react";
+import Login from "@/pages/login";
 
 function Navigation() {
   // Use location for active tab highlight
@@ -69,15 +70,17 @@ function Router() {
   );
 }
 
-import { useEffect } from "react";
-// ...removed useToast import...
-
 function App() {
-  // ...existing code...
+  const [authenticated, setAuthenticated] = useState(false);
+
+  // Check for authentication state (could use localStorage, cookie, etc. for persistence)
+  if (!authenticated) {
+    return <Login onSuccess={() => setAuthenticated(true)} />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-  {/* ...removed Toaster component... */}
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

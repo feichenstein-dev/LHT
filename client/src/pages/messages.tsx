@@ -15,12 +15,18 @@ export default function Messages() {
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  // ...removed toast usage...
   const queryClient = useQueryClient();
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages"],
-    select: (msgs) => [...msgs].sort((a, b) => new Date(a.sent_at || '').getTime() - new Date(b.sent_at || '').getTime()),
+    select: (msgs) =>
+      msgs
+        .map((msg) => ({
+          ...msg,
+          delivered_count: msg.delivered_count || 0,
+          status: msg.status || "pending",
+        }))
+        .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime()),
   });
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
@@ -36,18 +42,16 @@ export default function Messages() {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
-      // Optionally, you can add non-intrusive feedback here (e.g., a status bar or toast)
+      logMessageStatus(data.id, "Success", data);
     },
     onError: (error: any) => {
-      // Optionally, you can add non-intrusive error feedback here
+      logMessageStatus(null, "Error", error);
     },
   });
 
   const handleSendMessage = () => {
     if (!messageText.trim()) return;
-    // Optionally, you can add non-intrusive feedback here if no subscribers
     if (subscribers.length === 0) {
-      // No popup
       return;
     }
     sendMessageMutation.mutate(messageText);
@@ -55,25 +59,22 @@ export default function Messages() {
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageText(e.target.value);
-    
-    // Auto-resize textarea
+
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + "px";
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  // Scroll to bottom when messages change or on initial mount
   useEffect(() => {
     if (!chatContainerRef.current) return;
-    // Use setTimeout to ensure DOM updates before scrolling
     setTimeout(() => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -81,7 +82,7 @@ export default function Messages() {
     }, 0);
   }, [messages]);
 
-  const activeSubscribers = subscribers.filter((sub: Subscriber) => sub.status === 'active');
+  const activeSubscribers = subscribers.filter((sub: Subscriber) => sub.status === "active");
 
   if (messagesLoading) {
     return (
@@ -91,14 +92,15 @@ export default function Messages() {
     );
   }
 
+  console.log("MessageBubble activeCount values:", messages.map(msg => ({ id: msg.id, activeCount: msg.active_count || 0 }))); // Log activeCount values
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Chat Container */}
-      <div 
+      <div
         ref={chatContainerRef}
         className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
         data-testid="chat-container"
-        style={{ maxHeight: 'calc(100vh - 180px)' }}
+        style={{ maxHeight: "calc(100vh - 180px)" }}
       >
         <div className="space-y-4 max-w-4xl mx-auto">
           {messages.length === 0 ? (
@@ -114,14 +116,32 @@ export default function Messages() {
                 timestamp={
                   message.sent_at
                     ? new Date(message.sent_at).toLocaleString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
                         hour12: true,
                       })
-                    : ''
+                    : ""
+                }
+                deliveryInfo={{
+                  count: message.delivered_count || 0,
+                  status: message.status || "pending",
+                }}
+                activeCount={message.active_count || 0} // Pass activeCount
+                deliveredCount={message.delivered_count || 0} // Pass deliveredCount
+                actions={
+                  message.status === "failed" && (
+                    <Button
+                      onClick={() => handleRetryMessage(message.id)}
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                    >
+                      Retry
+                    </Button>
+                  )
                 }
               />
             ))
@@ -129,7 +149,6 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* Message Input Area */}
       <div className="border-t border-border bg-background p-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-end space-x-3">
@@ -156,16 +175,26 @@ export default function Messages() {
                   <span>{activeSubscribers.length} subscribers</span>
                 </button>
                 <span className="text-xs text-muted-foreground" data-testid="character-count">
-                  {messageText.length}/160 characters
+                  {messageText.length}/{/[\u0590-\u05FF]/.test(messageText) ? 670 : 1530} characters
                 </span>
               </div>
             </div>
             <Button
               onClick={handleSendMessage}
-              disabled={!messageText.trim() || sendMessageMutation.isPending || activeSubscribers.length === 0}
+              disabled={
+                !messageText.trim() ||
+                sendMessageMutation.isPending ||
+                activeSubscribers.length === 0 ||
+                messageText.length > (/[\u0590-\u05FF]/.test(messageText) ? 670 : 1530)
+              }
               size="icon"
               className="rounded-full w-11 h-11 shrink-0"
               data-testid="send-button"
+              data-tooltip={
+                messageText.length > (/[\u0590-\u05FF]/.test(messageText) ? 670 : 1530)
+                  ? "Message exceeds the character limit"
+                  : ""
+              }
             >
               <Send className="h-4 w-4" />
             </Button>
@@ -173,13 +202,11 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* Subscribers Modal */}
       <SubscribersModal
         open={subscribersModalOpen}
         onOpenChange={setSubscribersModalOpen}
       />
 
-      {/* Floating Action Button for Subscribers */}
       <Button
         onClick={() => setSubscribersModalOpen(true)}
         className="fixed bottom-6 right-6 rounded-full w-14 h-14 shadow-lg hover:shadow-xl z-40"
@@ -191,3 +218,33 @@ export default function Messages() {
     </div>
   );
 }
+
+const logMessageStatus = async (
+  messageId: string | null,
+  status: string,
+  details: any,
+  activeCount: number = 0,
+  deliveredCount: number = 0
+) => {
+  const logData = {
+    level: "info",
+    message: `Message ID: ${messageId}, Status: ${status}, Active Count: ${activeCount}, Delivered Count: ${deliveredCount}`,
+    details,
+  };
+
+  try {
+    await fetch("/api/log", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(logData),
+    });
+  } catch (error) {
+    console.error("Failed to send log to backend:", error);
+  }
+};
+
+const handleRetryMessage = (messageId: string) => {
+  console.log(`Retrying message with ID: ${messageId}`);
+};

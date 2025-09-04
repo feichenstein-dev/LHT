@@ -9,6 +9,13 @@ import { formatPhoneNumber } from "@/lib/supabase";
 import { ChevronDown, Eye } from "lucide-react";
 import { RotateCcw } from "lucide-react";
 import type { DeliveryLog, Subscriber } from "@shared/schema";
+import MessageBubble from "@/components/message-bubble";
+
+// Utility function to calculate message length based on encoding
+const calculateMessageLength = (message: string): number => {
+  const isHebrew = /[\u0590-\u05FF]/.test(message);
+  return isHebrew ? message.length * 2 : message.length;
+};
 
 export default function Logs() {
   // ...existing code...
@@ -88,7 +95,16 @@ export default function Logs() {
     messageDropdownOptions = messages.map((msg: any) => ({
       value: msg.message_text,
       label: msg.message_text,
-      date: msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : "",
+      date: msg.sent_at
+        ? new Date(msg.sent_at).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : "",
     }));
   } else if (direction === 'inbound') {
     const inboundLogs = logs.filter((log: any) => log.direction === 'inbound').map((log: any) => {
@@ -291,6 +307,7 @@ export default function Logs() {
                         {String(status).charAt(0).toUpperCase() + String(status).slice(1)}
                       </TableHead>
                     ))}
+                    <TableHead className="text-base font-semibold text-center text-foreground">Total</TableHead>
                     <TableHead className="text-base font-semibold text-center text-foreground">Details</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -304,16 +321,22 @@ export default function Logs() {
                     return (
                       <>
                         <TableRow key={msg.message_id}>
-                          <TableCell className="w-[45%] truncate text-base">{msg.message_text}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{msg.sent_at ? new Date(msg.sent_at).toLocaleString(undefined, {
-                            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-                          }) : ''}</TableCell>
-                          {/* Dynamic status counts */}
+                          <TableCell className="w-[45%] truncate text-base">
+                            {msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {msg.sent_at ? new Date(msg.sent_at).toLocaleString(undefined, {
+                              month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                            }) : ''}
+                          </TableCell>
                           {statusOptions.map((status, idx) => (
                             <TableCell key={idx} className="text-center font-semibold text-base text-foreground">
                               {statusCounts[String(status)]}
                             </TableCell>
                           ))}
+                          <TableCell className="text-center font-semibold text-base text-foreground">
+                            {msgLogs.length}
+                          </TableCell>
                           <TableCell className="text-center">
                             <Button size="sm" variant="outline" onClick={() => setExpandedMsgId(expandedMsgId === msg.message_id ? null : msg.message_id)}>
                               <Eye className="w-4 h-4 mr-1" />
@@ -323,7 +346,7 @@ export default function Logs() {
                         </TableRow>
                         {expandedMsgId === msg.message_id && (
                           <TableRow>
-                            <TableCell colSpan={3 + statusOptions.length} className="p-0 border-none">
+                            <TableCell colSpan={4 + statusOptions.length} className="p-0 border-none">
                               <div className="flex justify-center items-center py-4">
                                 <div className="w-full flex justify-center">
                                   <div
@@ -331,14 +354,17 @@ export default function Logs() {
                                     style={{ maxWidth: '98%', width: '98%', padding: '15px' }}
                                   >
                                     <h3 className="text-lg font-semibold mb-4 text-primary">Delivery Details</h3>
+                                    <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
+                                    <p className="text-sm mb-4"><strong>Character Count:</strong> {calculateMessageLength(msg.message_text)}</p>
+                                    <p className="text-sm mb-4"><strong>Sent To:</strong> {msg.delivered_count} Delivered / {msg.current_active_subscribers} Active</p>
                                     <Table className="w-full">
                                       <TableHeader>
                                         <TableRow>
-                                          <TableHead className="text-base font-semibold text-foreground">Name</TableHead>
-                                          <TableHead className="text-base font-semibold text-foreground">Phone Number</TableHead>
-                                          <TableHead className="text-base font-semibold text-center text-foreground">Sent At</TableHead>
-                                          <TableHead className="text-base font-semibold text-center text-foreground">Status</TableHead>
-                                          <TableHead className="text-base font-semibold text-center text-foreground">Retry</TableHead>
+                                          <TableHead className="text-base font-semibold text-left text-foreground">Name</TableHead>
+                                          <TableHead className="text-base font-semibold text-left text-foreground">Phone Number</TableHead>
+                                          <TableHead className="text-base font-semibold text-left text-foreground">Sent At</TableHead>
+                                          <TableHead className="text-base font-semibold text-left text-foreground">Status</TableHead>
+                                          <TableHead className="text-base font-semibold text-left text-foreground">Retry</TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
@@ -346,11 +372,11 @@ export default function Logs() {
                                           <TableRow key={log.id} className="hover:bg-gray-200">
                                             <TableCell className="font-normal">{log.subscriber_name}</TableCell>
                                             <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(log.subscriber_phone) : log.subscriber_phone}</TableCell>
-                                            <TableCell className="text-center font-normal">{log.updated_at ? new Date(log.updated_at).toLocaleString(undefined, {
+                                            <TableCell className="text-left font-normal">{log.updated_at ? new Date(log.updated_at).toLocaleString(undefined, {
                                               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
                                             }) : ''}</TableCell>
-                                            <TableCell className="text-center font-normal">{log.status ? log.status.replace(/(^|\s)[a-z]/g, (c: string) => c.toUpperCase()) : ""}</TableCell>
-                                            <TableCell className="text-center font-normal">
+                                            <TableCell className="text-left font-normal">{log.status ? log.status.replace(/(^|\s)[a-z]/g, (c: string) => c.toUpperCase()) : ""}</TableCell>
+                                            <TableCell className="text-left font-normal">
                                               <Button
                                                 size="sm"
                                                 variant={log.status === "failed" ? "destructive" : "outline"}

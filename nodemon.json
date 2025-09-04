@@ -1,0 +1,6 @@
+{
+  "watch": ["server", "shared"],
+  "ext": "js,ts,tsx,json",
+  "ignore": ["client/"],
+  "exec": "tsx server/index.ts"
+}

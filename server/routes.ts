@@ -39,6 +39,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "sent",
         direction: "outbound",
         message_text: message.body,
+        name: null,
+        phone_number: null
       });
       res.json({ success: true });
     } catch (error) {
@@ -78,30 +80,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveryPromises = activeSubscribers.map(async (subscriber) => {
         try {
           if (!message) throw new Error('Message is undefined');
-          // Send SMS via Telnyx
           const apiKey = process.env.TELNYX_API_KEY;
           const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
           if (!apiKey || !phoneNumber) {
             throw new Error(`Missing Telnyx configuration: API_KEY=${!!apiKey}, PHONE=${!!phoneNumber}`);
           }
-          console.log(`Sending SMS to ${subscriber.phone_number} from ${phoneNumber}`);
+          console.log(`Sending message to ${subscriber.phone_number} from ${phoneNumber}`);
           console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
-          // Check API key format
           if (!apiKey.startsWith('KEY')) {
             throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Current format: ${apiKey.substring(0, 10)}... Get your key from https://portal.telnyx.com/#/app/api-keys`);
           }
           const telnyxClient = new Telnyx(apiKey);
-          const response = await telnyxClient.messages.create({
+          // Calculate the message length and log it
+          const messageLength = message.body.length;
+          console.log(`Message length: ${messageLength} characters`);
+
+          // Determine if the message contains Hebrew characters
+          const containsHebrew = /[\u0590-\u05FF]/.test(message.body);
+
+          // Telnyx concatenated SMS limits
+          const maxParts = 10; // Maximum number of parts for concatenated SMS
+          const maxCharactersPerPart = containsHebrew ? 67 : 153; // UCS-2 for Hebrew, GSM-7 otherwise
+          const maxCharacters = maxParts * maxCharactersPerPart;
+
+          console.log(`Message encoding: ${containsHebrew ? 'UCS-2 (Hebrew)' : 'GSM-7'}`);
+          console.log(`Character limit: ${maxCharacters} characters`);
+
+          // Prevent sending if the message exceeds the dynamic limit
+          if (messageLength > maxCharacters) {
+            console.error(`Message exceeds the Telnyx limit of ${maxCharacters} characters. Cannot send.`);
+            throw new Error(`Message exceeds the Telnyx limit of ${maxCharacters} characters. Cannot send.`);
+          }
+
+          // Construct the SMS payload
+          const msgPayload = {
             from: phoneNumber,
             to: subscriber.phone_number,
             text: message.body,
-            webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
-          } as any);
+            webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`
+          };
+
+          // Log the payload being sent to Telnyx for debugging
+          console.log(`Telnyx payload for ${subscriber.phone_number}:`, JSON.stringify(msgPayload, null, 2));
+
+          // Send the SMS
+          const response = await telnyxClient.messages.create(msgPayload as any);
+          console.log(`Telnyx API response for ${subscriber.phone_number}:`, JSON.stringify(response, null, 2));
+
+          if (response.data && response.data.errors && response.data.errors.length > 0) {
+            console.error(`Telnyx blocked the message to ${subscriber.phone_number}:`, JSON.stringify(response.data.errors, null, 2));
+          }
+          // Ensure all delivery events are logged
+          await storage.createDeliveryLog({
+            message_id: message.id,
+            subscriber_id: subscriber.id,
+            status: "sent", // Log as sent initially
+            direction: "outbound",
+            message_text: message.body,
+            name: subscriber.name || null,
+            phone_number: subscriber.phone_number || null,
+          });
           // Do not log delivery until webhook returns final status
           return { success: true, subscriber: subscriber.phone_number };
         } catch (error) {
-          console.error(`Failed to send to ${subscriber.phone_number}:`, error);
-          // Create delivery log with failed status
+          let errorMsg = '';
+          if (error && typeof error === 'object' && 'raw' in error && error.raw && typeof error.raw === 'object') {
+            const raw = error.raw as any;
+            if (Array.isArray(raw.errors) && raw.errors.length > 0) {
+              errorMsg = raw.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+            } else if (raw.errors) {
+              errorMsg = JSON.stringify(raw.errors);
+            } else {
+              errorMsg = JSON.stringify(raw);
+            }
+          } else if (error instanceof Error) {
+            errorMsg = error.message;
+          } else {
+            errorMsg = 'Unknown error';
+          }
+          console.error(`Failed to send to ${subscriber.phone_number}:`, errorMsg);
           if (message) {
             await storage.createDeliveryLog({
               message_id: message.id,
@@ -109,9 +166,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               status: "failed",
               direction: "outbound",
               message_text: message.body,
+              name: subscriber.name || null,
+              phone_number: subscriber.phone_number || null,
             });
           }
-          return { success: false, subscriber: subscriber.phone_number, error: error instanceof Error ? error.message : 'Unknown error' };
+          return { success: false, subscriber: subscriber.phone_number, error: errorMsg };
         }
       });
 
@@ -126,6 +185,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Failed delivery to ${result.subscriber}: ${result.error}`);
         }
       });
+
+      // Update the delivered_count field in the messages table
+      if (message) {
+        console.log(`Updating delivered_count for message ID ${message.id} with successCount: ${successCount}`);
+        const { error: updateError } = await storageModule.supabase
+          .from('messages')
+          .update({ delivered_count: successCount })
+          .eq('id', message.id);
+        if (updateError) {
+          console.error(`Failed to update delivered_count for message ID ${message.id}:`, updateError);
+        } else {
+          console.log(`Successfully updated delivered_count for message ID ${message.id}`);
+        }
+      }
+
+      // Log the total and sent values to the delivery logs database
+      await storageModule.supabase
+        .from('delivery_logs')
+        .insert({
+          total_subscribers: activeSubscribers.length,
+          sent_count: successCount,
+          timestamp: new Date().toISOString(),
+        });
 
       res.json({
         message,
@@ -288,46 +370,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('Telnyx webhook received:', JSON.stringify(req.body, null, 2));
       const { data } = req.body;
-      // Handle delivery status updates
+
       if (data && data.event_type === "message.finalized") {
-        const { id: telnyxMessageId, to, delivery_status, text, from } = data.payload;
-        // Only log when status is final
+        const {
+          id: telnyxMessageId,
+          to,
+          delivery_status,
+          text,
+          from
+        } = data.payload;
+
         let status = "sent";
         switch (delivery_status) {
-          case "delivered": status = "delivered"; break;
+          case "delivered":
+            status = "delivered";
+            break;
           case "failed":
-          case "undelivered": status = "failed"; break;
-          default: status = "sent";
+          case "undelivered":
+            status = "failed";
+            break;
+          default:
+            status = "sent";
         }
-        // Try to get name and phone number from Telnyx info
+
         let phone_number = "";
-        let name = "";
+        let name = null;
+
         if (typeof to === "string") {
           phone_number = to;
         } else if (to && typeof to.phone_number === "string") {
           phone_number = to.phone_number;
         }
+
         if (from && typeof from.name === "string") {
           name = from.name;
         }
+
+        // Fetch subscriber details if available
+        const subscriber = await storage.getSubscriberByPhone(phone_number);
+        if (subscriber) {
+          name = subscriber.name;
+        }
+
         await storage.createDeliveryLog({
           message_id: null, // If you have message_id, pass it here
-          subscriber_id: null, // If you have subscriber_id, pass it here
+          subscriber_id: subscriber ? subscriber.id : null,
           status,
+          telnyx_message_id: telnyxMessageId,
           direction: "outbound",
           message_text: text,
+          name,
+          phone_number,
         });
       }
 
-      // Handle inbound SMS for joining
       if (data && data.event_type === "message.received") {
-  const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
+        const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
         const text = data.payload.text;
         const joinMatch = text.match(/^join(.*)$/i);
         const stopMatch = text.match(/^stop$/i);
-        let name: string | null = null;
+        let name = null;
         const apiKey = process.env.TELNYX_API_KEY;
         const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+
         if (joinMatch) {
           name = joinMatch[1].trim();
           if (name === "") name = null;
@@ -335,16 +440,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!existing) {
             await storage.createSubscriber({ phone_number: from, name });
           } else {
-            // If name is provided and different, update name and updated_at
             if (name && name !== existing.name) {
               const now = new Date().toISOString();
-              // Use Supabase directly to update
               await storageModule.supabase
                 .from('subscribers')
                 .update({ name, updated_at: now })
                 .eq('id', existing.id);
             }
-            // If status is not active, reactivate
             if (existing.status !== 'active') {
               const now = new Date().toISOString();
               await storageModule.supabase
@@ -353,15 +455,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .eq('id', existing.id);
             }
           }
-          // Log inbound join to delivery logs
           await storage.createDeliveryLog({
             message_id: null,
             subscriber_id: null,
             status: "received",
             direction: "inbound",
             message_text: text,
+            name,
+            phone_number: from,
           });
-          // Send welcome/help message
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             await telnyxClient.messages.create({
@@ -385,7 +487,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const existing = await storage.getSubscriberByPhone(from);
           if (existing && existing.status === 'active') {
             await storage.deleteSubscriber(existing.id);
-            // Send confirmation
             if (apiKey && telnyxNumber) {
               const telnyxClient = new Telnyx(apiKey);
               await telnyxClient.messages.create({
@@ -402,6 +503,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing Telnyx webhook:", error);
       res.status(500).json({ message: "Failed to process webhook" });
+    }
+  });
+
+  // Login endpoint
+  app.post("/api/login", async (req, res) => {
+    const { email, password } = req.body;
+    const envEmail = process.env.LOGIN_USERNAME;
+    const envPassword = process.env.LOGIN_PASSWORD;
+    if (!envEmail || !envPassword) {
+      return res.status(500).json({ error: "Login credentials not set in .env" });
+    }
+    if (email === envEmail && password === envPassword) {
+      return res.json({ success: true });
+    } else {
+      return res.status(401).json({ error: "Invalid email or password" });
     }
   });
 
