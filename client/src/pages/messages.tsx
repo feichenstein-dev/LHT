@@ -10,6 +10,11 @@ import { formatTimestamp } from "@/lib/supabase";
 import { Send, Users } from "lucide-react";
 import type { Message, Subscriber } from "@shared/schema";
 
+type ExtendedMessage = Message & {
+  current_active_subscribers?: number;
+  status: "delivered" | "failed" | "pending" | "unknown"; // Add "unknown" as a valid status
+};
+
 export default function Messages() {
   const [messageText, setMessageText] = useState("");
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
@@ -17,17 +22,20 @@ export default function Messages() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
+  const { data: messages = [], isLoading: messagesLoading } = useQuery<ExtendedMessage[]>({
     queryKey: ["/api/messages"],
-    select: (msgs) =>
+    select: (msgs: ExtendedMessage[]) =>
       msgs
-        .map((msg) => ({
+        .map((msg: ExtendedMessage) => ({
           ...msg,
           delivered_count: msg.delivered_count || 0,
-          status: msg.status || "pending",
+          current_active_subscribers: msg.current_active_subscribers || 0, // Explicitly include current_active_subscribers
+          status: msg.status || "unknown", // Default to "unknown" instead of "pending"
         }))
         .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime()),
   });
+
+  console.log('Processed Messages with current_active_subscribers:', messages); // Log processed messages
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
     queryKey: ["/api/subscribers"],
@@ -92,7 +100,17 @@ export default function Messages() {
     );
   }
 
-  console.log("MessageBubble activeCount values:", messages.map(msg => ({ id: msg.id, activeCount: msg.active_count || 0 }))); // Log activeCount values
+  // Add logs to ensure they are called when messages are loaded
+  console.log('Messages component rendered');
+  console.log('Messages API Response:', messages);
+  console.log('Subscribers API Response:', subscribers);
+
+  // Add logs to verify activeCount and deliveredCount values
+  console.log('MessageBubble activeCount and deliveredCount values:', messages.map(msg => ({
+    id: msg.id,
+    activeCount: msg.current_active_subscribers || 0,
+    deliveredCount: msg.delivered_count || 0
+  })));
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -129,7 +147,7 @@ export default function Messages() {
                   count: message.delivered_count || 0,
                   status: message.status || "pending",
                 }}
-                activeCount={message.active_count || 0} // Pass activeCount
+                activeCount={message.current_active_subscribers || 0} // Pass activeCount
                 deliveredCount={message.delivered_count || 0} // Pass deliveredCount
                 actions={
                   message.status === "failed" && (

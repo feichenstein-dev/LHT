@@ -23,6 +23,7 @@ export interface IStorage {
   createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber | undefined>;
   deleteSubscriber(id: string): Promise<void>;
   getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined>;
+  updateSubscriberStatus(id: string, status: string): Promise<Subscriber | undefined>;
 
   // Delivery Logs
   getDeliveryLogs(filters?: {
@@ -176,6 +177,7 @@ export class FallbackStorage implements IStorage {
     const deliveredCount = message.delivered_count || 0; // Replace with actual Telnyx response logic
 
     console.log('Inserting message with activeCount:', activeCountValue);
+    console.log('Final Active Subscribers Count:', activeCountValue);
 
     const { data, error } = await supabase
       .from('messages')
@@ -379,6 +381,22 @@ export class FallbackStorage implements IStorage {
     pending: number;
   }> {
     return await this.memoryStorage.getDeliveryStats();
+  }
+
+  async updateSubscriberStatus(id: string, status: string): Promise<Subscriber | undefined> {
+    const { data, error } = await supabase
+      .from('subscribers')
+      .update({ status })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Supabase error (updateSubscriberStatus):', error);
+      return undefined;
+    }
+
+    return data;
   }
 }
 

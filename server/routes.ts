@@ -261,6 +261,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/subscribers/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status || (status !== "active" && status !== "inactive")) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+
+      const updatedSubscriber = await storage.updateSubscriberStatus(id, status);
+
+      if (!updatedSubscriber) {
+        return res.status(404).json({ message: "Subscriber not found" });
+      }
+
+      // Send appropriate message based on status
+      const apiKey = process.env.TELNYX_API_KEY;
+      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+
+      if (apiKey && telnyxNumber) {
+        const telnyxClient = new Telnyx(apiKey);
+        const messageText =
+          status === "active"
+            ? `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`
+            : `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+
+        await telnyxClient.messages.create({
+          from: telnyxNumber,
+          to: updatedSubscriber.phone_number,
+          text: messageText,
+        } as any);
+
+        // Log the message in delivery logs
+        await storage.createDeliveryLog({
+          message_id: null, // Not from messages table
+          subscriber_id: updatedSubscriber.id,
+          status: "sent",
+          direction: "outbound",
+          message_text: messageText,
+          name: updatedSubscriber.name || null,
+          phone_number: updatedSubscriber.phone_number,
+        });
+      }
+
+      res.json({ message: "Subscriber status updated successfully", subscriber: updatedSubscriber });
+    } catch (error) {
+      console.error("Error updating subscriber status:", error);
+      res.status(500).json({ message: "Failed to update subscriber status" });
+    }
+  });
+
   app.delete("/api/subscribers/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -456,8 +507,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           await storage.createDeliveryLog({
-            message_id: null,
-            subscriber_id: null,
+            message_id: null, // Not from messages table
+            subscriber_id: existing ? existing.id : null,
             status: "received",
             direction: "inbound",
             message_text: text,
@@ -492,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await telnyxClient.messages.create({
                 from: telnyxNumber,
                 to: from,
-                text: `You have been unsubscribed. Reply JOIN with your name to subscribe again.`
+                text: `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`
               } as any);
             }
           }

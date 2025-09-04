@@ -9,7 +9,6 @@ import { formatPhoneNumber } from "@/lib/supabase";
 import { ChevronDown, Eye } from "lucide-react";
 import { RotateCcw } from "lucide-react";
 import type { DeliveryLog, Subscriber } from "@shared/schema";
-import MessageBubble from "@/components/message-bubble";
 
 // Utility function to calculate message length based on encoding
 const calculateMessageLength = (message: string): number => {
@@ -27,6 +26,7 @@ export default function Logs() {
       return response.json();
     },
   });
+  console.log('API Response:', logsData);
   const logs = logsData?.logs || [];
 
   // Dynamic status options for outbound delivery logs
@@ -43,7 +43,7 @@ export default function Logs() {
   const [filterText, setFilterText] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
-  const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [direction, setDirection] = useState<'lht' | 'inbound' | 'outbound'>('lht');
   const [filterDate, setFilterDate] = useState<string>("");
 
 
@@ -71,7 +71,7 @@ export default function Logs() {
   // Aggregate logs by message_id, join with subscribers for name/phone
   let filteredMessages: any[] = [];
   let messageDropdownOptions: any[] = [];
-  if (direction === 'outbound' && messagesData) {
+  if (direction === 'lht' && messagesData) {
     const messages = messagesData.map((msg: any) => {
       const msgLogs = logs.filter((log: any) => log.message_id === msg.id).map((log: any) => {
         let subscriber = null;
@@ -135,6 +135,33 @@ export default function Logs() {
       label: msg.message_text,
       date: msg.logs.length > 0
         ? new Date(Math.max(...msg.logs.map((log: any) => new Date(log.updated_at).getTime()))).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+          })
+        : '',
+    }));
+  } else if (direction === 'outbound') {
+    const outboundLogs = logs
+      .filter((log: any) => log.direction === 'outbound' && !messagesData?.some((msg: any) => msg.id === log.message_id))
+      .map((log: any) => {
+        let subscriber = null;
+        if (subscribersData) {
+          subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+        }
+        return {
+          ...log,
+          name: subscriber?.name || log.name || "",
+          phone_number: subscriber?.phone_number || log.phone_number || "",
+          message_text: log.message_text,
+          sent_at: log.updated_at,
+          status: log.status,
+        };
+      });
+    filteredMessages = outboundLogs;
+    messageDropdownOptions = outboundLogs.map((log: any) => ({
+      value: log.message_text,
+      label: log.message_text,
+      date: log.sent_at
+        ? new Date(log.sent_at).toLocaleString(undefined, {
             month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
           })
         : '',
@@ -207,7 +234,7 @@ export default function Logs() {
   if (filterDate) {
     filteredMessages = filteredMessages.filter((msg: any) => {
       // Outbound: use sent_at
-      if (direction === 'outbound') {
+      if (direction === 'lht') {
         if (!msg.sent_at) return false;
         const msgDate = new Date(msg.sent_at);
         const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
@@ -228,6 +255,29 @@ export default function Logs() {
     });
   }
 
+  // Add debug logs to trace current_active_subscribers
+  console.log('Filtered Messages:', filteredMessages);
+  console.log('Message Dropdown Options:', messageDropdownOptions);
+
+  // Ensure delivered_count and current_active_subscribers are included and defaulted
+  filteredMessages = filteredMessages.map((msg: any) => ({
+    ...msg,
+    delivered_count: msg.delivered_count || 0,
+    current_active_subscribers: msg.current_active_subscribers || 0,
+  }));
+
+  // Join filteredMessages with messagesData to populate delivered_count and current_active_subscribers
+  if (messagesData) {
+    filteredMessages = filteredMessages.map((msg: any) => {
+      const message = messagesData.find((m: any) => m.id === msg.message_id);
+      return {
+        ...msg,
+        delivered_count: message?.delivered_count || 0,
+        current_active_subscribers: message?.current_active_subscribers || 0,
+      };
+    });
+  }
+
   return (
     <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-8 px-2">
       <Card className="w-full max-w-full mx-auto">
@@ -240,16 +290,17 @@ export default function Logs() {
               <Select
                 value={direction}
                 onValueChange={(v) => {
-                  setDirection(v as 'outbound' | 'inbound');
+                  setDirection(v as 'lht' | 'inbound' | 'outbound');
                   setFilterText('all'); // Clear message filter when direction changes
                 }}
               >
-                <SelectTrigger className="w-40 h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-60 h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="outbound">Outbound</SelectItem>
+                  <SelectItem value="lht">Lashon Hara Texts</SelectItem>
                   <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterText} onValueChange={setFilterText}>
@@ -295,7 +346,7 @@ export default function Logs() {
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : filteredMessages.length === 0 ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">No messages found.</div>
-            ) : direction === 'outbound' ? (
+            ) : direction === 'lht' ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -356,7 +407,7 @@ export default function Logs() {
                                     <h3 className="text-lg font-semibold mb-4 text-primary">Delivery Details</h3>
                                     <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
                                     <p className="text-sm mb-4"><strong>Character Count:</strong> {calculateMessageLength(msg.message_text)}</p>
-                                    <p className="text-sm mb-4"><strong>Sent To:</strong> {msg.delivered_count} Delivered / {msg.current_active_subscribers} Active</p>
+                                    <p className="text-sm mb-4"><strong>Sent To:</strong> {`${msg.delivered_count || 0} delivered / ${msg.current_active_subscribers || 0} active subscribers`}</p>                                    
                                     <Table className="w-full">
                                       <TableHeader>
                                         <TableRow>

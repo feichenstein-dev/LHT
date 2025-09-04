@@ -1,7 +1,11 @@
 // Note: We're using Drizzle directly with DATABASE_URL, not the Supabase client
 // This file exists for any Supabase-specific utilities we might need
 
-export const formatPhoneNumber = (phoneNumber: string): string => {
+export const formatPhoneNumber = (phoneNumber: string | null): string | null => {
+  if (!phoneNumber || typeof phoneNumber !== 'string') {
+    return null; // Return null if phoneNumber is invalid
+  }
+
   // Remove all non-digits
   const cleaned = phoneNumber.replace(/\D/g, '');
   

@@ -30,7 +30,7 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const messageLength = calculateMessageLength(message);
 
-  console.log('MessageBubble Props:', { activeCount, deliveredCount });
+  console.debug('MessageBubble Active Count:', activeCount, 'Delivered Count:', deliveredCount);
 
   return (
     <div className="flex flex-col items-end">
@@ -57,7 +57,7 @@ export function MessageBubble({
             className="text-xs text-muted-foreground"
             data-testid="delivery-info"
           >
-            {`Message delivery summary: ${deliveredCount || 0} delivered / ${activeCount || 0} current active subscribers`}
+            {`${deliveredCount || 0} delivered / ${activeCount || 0} active subscribers`}
           </span>
           {deliveryInfo.status === 'delivered' && (
             <i className="fas fa-check-double text-xs text-green-500" />

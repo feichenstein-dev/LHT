@@ -71,6 +71,56 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
   });
 
+  const reactivateSubscriberMutation = useMutation({
+    mutationFn: async (id: string) => {
+      try {
+        console.log("Sending PATCH request to reactivate subscriber:", {
+          url: `/api/subscribers/${id}`,
+          method: "PATCH",
+          body: { status: "active" },
+        });
+
+        const response = await apiRequest("PATCH", `/api/subscribers/${id}`, { status: "active" });
+        const contentType = response.headers.get("content-type");
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("API Error Response:", {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+            body: errorText,
+          });
+          throw new Error(`Failed to reactivate subscriber with ID: ${id}`);
+        }
+
+        if (contentType && contentType.includes("application/json")) {
+          return response.json();
+        } else {
+          const errorText = await response.text();
+          console.error("Unexpected Response Format:", {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+            body: errorText,
+          });
+          throw new Error("Unexpected response format from server.");
+        }
+      } catch (error) {
+        console.error("Error during API call:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      console.log("Subscriber reactivated successfully.");
+    },
+    onError: (error: any) => {
+      console.error("Failed to reactivate subscriber:", error);
+      window.alert("Failed to reactivate subscriber. Please try again.");
+    },
+  });
+
   const handleAddSubscriber = () => {
     if (!phoneNumber.trim()) return;
     if (!validatePhoneNumber(phoneNumber)) {
@@ -92,6 +142,12 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const handleRemoveSubscriber = (id: string) => {
     if (confirm("Are you sure you want to remove this subscriber?")) {
       removeSubscriberMutation.mutate(id);
+    }
+  };
+
+  const handleReactivateSubscriber = (id: string) => {
+    if (confirm("Are you sure you want to reactivate this subscriber?")) {
+      reactivateSubscriberMutation.mutate(id);
     }
   };
 
@@ -192,15 +248,26 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                     </div>
                     <div className="flex items-center space-x-2">
                       <StatusBadge status={subscriber.status || 'active'} />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveSubscriber(subscriber.id)}
-                        disabled={removeSubscriberMutation.isPending}
-                        data-testid={`button-remove-${subscriber.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
-                      </Button>
+                      {subscriber.status === 'inactive' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReactivateSubscriber(subscriber.id)}
+                          data-testid={`button-reactivate-${subscriber.id}`}
+                        >
+                          Reactivate
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveSubscriber(subscriber.id)}
+                          disabled={removeSubscriberMutation.isPending}
+                          data-testid={`button-remove-${subscriber.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
