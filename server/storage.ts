@@ -2,14 +2,21 @@ import { supabase } from "./lib/supabase";
 import {
   type Message,
   type Subscriber,
-  type DeliveryLog,
+  type DeliveryLog as BaseDeliveryLog,
   type InsertMessage,
   type InsertSubscriber,
-  type InsertDeliveryLog
+  type InsertDeliveryLog as BaseInsertDeliveryLog
 } from "@shared/schema";
 
 // Supabase client is now used for all database operations
 export { supabase };
+
+export interface DeliveryLog extends BaseDeliveryLog {
+  error_message?: string | null;
+}
+export interface InsertDeliveryLog extends BaseInsertDeliveryLog {
+  error_message?: string | null;
+}
 
 export interface IStorage {
   // Messages
@@ -24,6 +31,8 @@ export interface IStorage {
   deleteSubscriber(id: string): Promise<void>;
   getSubscriberByPhone(phoneNumber: string): Promise<Subscriber | undefined>;
   updateSubscriberStatus(id: string, status: string): Promise<Subscriber | undefined>;
+  setSubscriberBlocked(phoneNumber: string): Promise<void>;
+  unblockSubscriber(phoneNumber: string): Promise<void>;
 
   // Delivery Logs
   getDeliveryLogs(filters?: {
@@ -46,6 +55,22 @@ export interface IStorage {
 
 
 class MemoryStorage implements IStorage {
+  async setSubscriberBlocked(phoneNumber: string): Promise<void> {
+    const subscriber = this.subscribers.find(s => s.phone_number === phoneNumber);
+    if (subscriber) subscriber.status = 'Blocked until Start';
+  }
+  async unblockSubscriber(phoneNumber: string): Promise<void> {
+    const subscriber = this.subscribers.find(s => s.phone_number === phoneNumber);
+    if (subscriber) subscriber.status = 'active';
+  }
+  async updateSubscriberStatus(id: string, status: string): Promise<Subscriber | undefined> {
+    const subscriber = this.subscribers.find(s => s.id === id);
+    if (subscriber) {
+      subscriber.status = status;
+      return subscriber;
+    }
+    return undefined;
+  }
   private messages: Message[] = [];
   private subscribers: Subscriber[] = [];
   private deliveryLogs: (DeliveryLog & { subscriber: Subscriber | null })[] = [];
@@ -118,6 +143,7 @@ class MemoryStorage implements IStorage {
       message_text: log.message_text ?? null,
       name: log.name ?? null,
       phone_number: log.phone_number ?? null,
+      error_message: log.error_message ?? null,
     };
     this.deliveryLogs.push({ ...newLog, subscriber: null });
     return newLog;
@@ -148,6 +174,26 @@ class MemoryStorage implements IStorage {
 }
 
 export class FallbackStorage implements IStorage {
+  async setSubscriberBlocked(phoneNumber: string): Promise<void> {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('subscribers')
+      .update({ status: 'Blocked until Start', updated_at: now })
+      .eq('phone_number', phoneNumber);
+    if (error) {
+      console.error('Supabase error (setSubscriberBlocked):', error);
+    }
+  }
+  async unblockSubscriber(phoneNumber: string): Promise<void> {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('subscribers')
+      .update({ status: 'active', updated_at: now })
+      .eq('phone_number', phoneNumber);
+    if (error) {
+      console.error('Supabase error (unblockSubscriber):', error);
+    }
+  }
   private memoryStorage = new MemoryStorage();
 
   async getMessages(): Promise<Message[]> {
@@ -348,6 +394,7 @@ export class FallbackStorage implements IStorage {
       message_text: log.message_text,
       name: log.name ?? null,
       phone_number: log.phone_number ?? null,
+      error_message: log.error_message ?? null,
     };
 
     // Log the data being inserted for debugging

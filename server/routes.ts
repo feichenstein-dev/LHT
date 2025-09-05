@@ -319,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send unsubscribe text if deactivated (active -> inactive)
         if (normalizedStatus === "inactive" && normalizedPrevStatus === "active") {
           shouldSend = true;
-          messageText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+          messageText = `You have been unsubscribed from Lashon Hara Texts. Reply START to subscribe again.`;
         }
         console.log(`[PATCH /api/subscribers/:id] Should send text?`, shouldSend, '| Message:', messageText);
         if (shouldSend) {
@@ -578,13 +578,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const text = data.payload.text;
         const joinMatch = text.match(/^join(.*)$/i);
         const stopMatch = text.match(/^stop$/i);
+        const startMatch = text.match(/^start$/i);
         let name = null;
         const apiKey = process.env.TELNYX_API_KEY;
         const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
-
-        // Always log the inbound message, with subscriber_id if found
         let subscriber = await storage.getSubscriberByPhone(from);
-        let logInbound = true;
+
+        // Always log the inbound message ONCE, before any keyword logic
+        await storage.createDeliveryLog({
+          message_id: null,
+          subscriber_id: subscriber ? subscriber.id : null,
+          status: "received",
+          direction: "inbound",
+          message_text: text,
+          name: subscriber ? subscriber.name : null,
+          phone_number: from,
+        });
 
         // JOIN keyword logic
         if (joinMatch) {
@@ -611,20 +620,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               subscriber = await storage.getSubscriberByPhone(from);
             }
           }
-          // Only log inbound once
-          if (logInbound) {
+          // Log the welcome reply (outbound)
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            const replyText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: replyText
+            } as any);
             await storage.createDeliveryLog({
               message_id: null,
               subscriber_id: subscriber ? subscriber.id : null,
-              status: "received",
-              direction: "inbound",
-              message_text: text,
+              status: "sent",
+              direction: "outbound",
+              message_text: replyText,
               name: subscriber ? subscriber.name : null,
               phone_number: from,
             });
-            logInbound = false;
           }
-          // Log the welcome reply (outbound)
+        }
+        // START keyword logic (unblock and send welcome)
+        else if (startMatch) {
+          // Unblock the subscriber in DB
+          await storage.unblockSubscriber(from);
+          // Send welcome message
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
@@ -646,19 +666,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         // HELP keyword logic
         else if (text.match(/^help$/i)) {
-          // Only log inbound once
-          if (logInbound) {
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "received",
-              direction: "inbound",
-              message_text: text,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
-            logInbound = false;
-          }
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
@@ -680,59 +687,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         // STOP keyword logic
         else if (stopMatch) {
-          // Only log inbound once
-          if (logInbound) {
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "received",
-              direction: "inbound",
-              message_text: text,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
-            logInbound = false;
-          }
           let wasActive = subscriber && subscriber.status === 'active';
           if (wasActive) {
             if (subscriber) {
-              await storage.deleteSubscriber(subscriber.id);
+              // Set status to 'blocked' instead of deleting
+              await storage.updateSubscriberStatus(subscriber.id, 'blocked');
             }
           }
-          if (apiKey && telnyxNumber) {
-            const telnyxClient = new Telnyx(apiKey);
-            const replyText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
-            await telnyxClient.messages.create({
-              from: telnyxNumber,
-              to: from,
-              text: replyText
-            } as any);
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "sent",
-              direction: "outbound",
-              message_text: replyText,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
-          }
+          // Do not send or log any outbound message after STOP. Let carrier handle auto-reply if enabled.
+          // TIP: If you want to avoid carrier-level blocks, use a custom keyword like "PAUSE" instead of "STOP". In your logic, handle "pause" by setting the subscriber status to "paused" and do not send any more messages until they text "resume". This way, you keep control and avoid the carrier's opt-out system.
         }
         // All other inbound messages
         else {
-          // Only log inbound once
-          if (logInbound) {
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "received",
-              direction: "inbound",
-              message_text: text,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
-            logInbound = false;
-          }
         }
       }
 
