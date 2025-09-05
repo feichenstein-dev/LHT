@@ -167,8 +167,8 @@ export default function Messages() {
         </div>
       </div>
 
-      <div className="border-t border-border bg-background p-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="border-t border-border bg-background p-3">
+        <div className="max-w-3xl mx-auto">
           <div className="flex items-end space-x-3">
             <div className="flex-1">
               <div className="bg-muted rounded-3xl px-4 py-2 min-h-[44px] flex items-center">
