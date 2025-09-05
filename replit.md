@@ -1,4 +1,4 @@
-# Lashon Hara Texts
+# Sefer Chofetz Chaim Texts
 
 ## Overview
 

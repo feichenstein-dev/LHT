@@ -178,7 +178,7 @@ export default function Logs() {
                 <SelectValue placeholder="Direction" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="lht">Lashon Hara Texts</SelectItem>
+                <SelectItem value="lht">Sefer Chofetz Chaim Texts</SelectItem>
                 <SelectItem value="inbound">Inbound</SelectItem>
                 <SelectItem value="outbound">Outbound</SelectItem>
               </SelectContent>

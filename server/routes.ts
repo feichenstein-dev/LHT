@@ -314,12 +314,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send welcome text if new or reactivated (prevStatus is null/undefined/inactive -> active)
         if (normalizedStatus === "active" && (normalizedPrevStatus === "inactive" || normalizedPrevStatus === null || normalizedPrevStatus === undefined)) {
           shouldSend = true;
-          messageText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
+          messageText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
         }
         // Send unsubscribe text if deactivated (active -> inactive)
         if (normalizedStatus === "inactive" && normalizedPrevStatus === "active") {
           shouldSend = true;
-          messageText = `You have been unsubscribed from Lashon Hara Texts. Reply START to subscribe again.`;
+          messageText = `You have been unsubscribed from Sefer Chofetz Chaim Texts. Reply START to subscribe again.`;
         }
         console.log(`[PATCH /api/subscribers/:id] Should send text?`, shouldSend, '| Message:', messageText);
         if (shouldSend) {
@@ -370,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
       if (subscriber && apiKey && telnyxNumber) {
         const telnyxClient = new Telnyx(apiKey);
-        const messageText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+        const messageText = `You have been unsubscribed from Sefer Chofetz Chaim Texts. Reply JOIN with your name to subscribe again.`;
         try {
           const telnyxResult = await telnyxClient.messages.create({
             from: telnyxNumber,
@@ -623,7 +623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Log the welcome reply (outbound)
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
-            const replyText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
+            const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
             await telnyxClient.messages.create({
               from: telnyxNumber,
               to: from,
@@ -647,7 +647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Send welcome message
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
-            const replyText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
+            const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
             await telnyxClient.messages.create({
               from: telnyxNumber,
               to: from,
@@ -668,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         else if (text.match(/^help$/i)) {
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
-            const replyText = `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
+            const replyText = `You are currently subscribed to Sefer Chofetz Chaim Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
             await telnyxClient.messages.create({
               from: telnyxNumber,
               to: from,
