@@ -296,11 +296,11 @@ export default function Logs() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">Name</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">Phone Number</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '30%' }}>Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Name</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Phone Number</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -309,8 +309,8 @@ export default function Logs() {
                     const msgText = (log.message_text || '').length > 100 ? `${log.message_text.slice(0, 100)}...` : (log.message_text || '');
                     return (
                       <TableRow key={log.id}>
-                        <TableCell className="truncate text-base" style={{ maxWidth: 500 }} title={log.message_text || ''}>{msgText}</TableCell>
-                        <TableCell className="w-font-normal">{sub?.name || log.name || ""}</TableCell>
+                        <TableCell className="truncate text-base" style={{ maxWidth: 300 }} title={log.message_text || ''}>{msgText}</TableCell>
+                        <TableCell className="font-normal">{sub?.name || log.name || ""}</TableCell>
                         <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ""}</TableCell>
                         <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
                         <TableCell className="text-left font-normal flex items-center gap-2">
