@@ -178,25 +178,27 @@ export default function Logs() {
                   persist('logs_selected', 'all');
                 }}
               >
-                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="min-w-[220px] w-auto h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-[220px] w-auto">
                   <SelectItem value="lht">Sefer Chofetz Chaim Texts</SelectItem>
                   <SelectItem value="inbound">Inbound</SelectItem>
                   <SelectItem value="outbound">Outbound</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '100%', maxWidth: '100%' }}>
+      <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-                <SelectTrigger className="w-full max-w-[500px] h-12 text-base bg-muted rounded-2xl px-4">
+        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
-                <SelectContent className="w-full max-w-[500px]">
-                  <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
+        <SelectContent className="w-full">
+                  <SelectItem value="all" className="w-[30%]">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
                   {dropdownOptions.map((opt, idx) => (
-                    <SelectItem key={idx} value={opt.value} className="w-full">{opt.label}</SelectItem>
+                    <SelectItem key={idx} value={opt.value} className="w-full truncate" title={opt.label}>
+                      <span className="text-sm font-medium text-gray-700">{opt.label}</span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -210,11 +212,11 @@ export default function Logs() {
               />
             </div>
           </div>
-          <div className="bg-background rounded-xl shadow-md w-full overflow-x-auto" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : direction === 'lht' ? (
-              <Table className="w-full" style={{ tableLayout: 'auto', width: '98vw', maxWidth: '98vw' }}>
+              <Table className="table-auto w-full" style={{ tableLayout: 'fixed' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
