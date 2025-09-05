@@ -8,6 +8,14 @@ import { z } from "zod";
 import Telnyx from 'telnyx';
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Log all incoming requests for debugging
+  app.use((req, res, next) => {
+    console.log(`[INCOMING REQUEST] ${req.method} ${req.url}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log('[REQUEST BODY]', JSON.stringify(req.body));
+    }
+    next();
+  });
   // Retry message endpoint
   app.post("/api/retry-message", async (req, res) => {
     try {
@@ -262,6 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/subscribers/:id", async (req, res) => {
+    console.log("[PATCH /api/subscribers/:id] Endpoint triggered");
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -270,39 +279,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status value" });
       }
 
+      // Fetch the current subscriber to check previous status
+      let prevStatus = null;
+      try {
+        const allSubscribers = await storage.getSubscribers();
+        const currentSubscriber = allSubscribers.find((s) => String(s.id) === String(id));
+        prevStatus = currentSubscriber ? currentSubscriber.status : null;
+      } catch (e) {
+        console.error('Failed to fetch current subscriber for status check:', e);
+      }
+
+      // Normalize status values for comparison
+      const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : status;
+      const normalizedPrevStatus = typeof prevStatus === 'string' ? prevStatus.toLowerCase() : prevStatus;
+
+      // Logging after id and status are defined
+      console.log(`[PATCH /api/subscribers/:id] Requested status change for subscriber ID:`, id);
+      console.log(`[PATCH /api/subscribers/:id] Previous status:`, normalizedPrevStatus, '| New status:', normalizedStatus);
+
       const updatedSubscriber = await storage.updateSubscriberStatus(id, status);
 
       if (!updatedSubscriber) {
         return res.status(404).json({ message: "Subscriber not found" });
       }
 
-      // Send appropriate message based on status
+      // Only send welcome text if reactivated (inactive -> active)
       const apiKey = process.env.TELNYX_API_KEY;
       const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
 
       if (apiKey && telnyxNumber) {
         const telnyxClient = new Telnyx(apiKey);
-        const messageText =
-          status === "active"
-            ? `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`
-            : `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
-
-        await telnyxClient.messages.create({
-          from: telnyxNumber,
-          to: updatedSubscriber.phone_number,
-          text: messageText,
-        } as any);
-
-        // Log the message in delivery logs
-        await storage.createDeliveryLog({
-          message_id: null, // Not from messages table
-          subscriber_id: updatedSubscriber.id,
-          status: "sent",
-          direction: "outbound",
-          message_text: messageText,
-          name: updatedSubscriber.name || null,
-          phone_number: updatedSubscriber.phone_number,
-        });
+        let shouldSend = false;
+        let messageText = "";
+        // Send welcome text if new or reactivated (prevStatus is null/undefined/inactive -> active)
+        if (normalizedStatus === "active" && (normalizedPrevStatus === "inactive" || normalizedPrevStatus === null || normalizedPrevStatus === undefined)) {
+          shouldSend = true;
+          messageText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
+        }
+        // Send unsubscribe text if deactivated (active -> inactive)
+        if (normalizedStatus === "inactive" && normalizedPrevStatus === "active") {
+          shouldSend = true;
+          messageText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+        }
+        console.log(`[PATCH /api/subscribers/:id] Should send text?`, shouldSend, '| Message:', messageText);
+        if (shouldSend) {
+          try {
+            const telnyxResult = await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: updatedSubscriber.phone_number,
+              text: messageText,
+            } as any);
+            console.log(`[PATCH /api/subscribers/:id] Telnyx API response:`, JSON.stringify(telnyxResult, null, 2));
+          } catch (err) {
+            console.error(`[PATCH /api/subscribers/:id] Telnyx API error:`, err);
+          }
+          // Log the message in delivery logs
+          await storage.createDeliveryLog({
+            message_id: null, // Not from messages table
+            subscriber_id: updatedSubscriber.id,
+            status: "sent",
+            direction: "outbound",
+            message_text: messageText,
+            name: updatedSubscriber.name || null,
+            phone_number: updatedSubscriber.phone_number,
+          });
+        }
       }
 
       res.json({ message: "Subscriber status updated successfully", subscriber: updatedSubscriber });
@@ -315,6 +356,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/subscribers/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      // Fetch subscriber before deleting for phone number and name
+      let subscriber = null;
+      try {
+        const allSubscribers = await storage.getSubscribers();
+        subscriber = allSubscribers.find((s) => String(s.id) === String(id));
+      } catch (e) {
+        console.error('Failed to fetch subscriber before delete:', e);
+      }
+
+      // Send unsubscribe SMS if possible
+      const apiKey = process.env.TELNYX_API_KEY;
+      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+      if (subscriber && apiKey && telnyxNumber) {
+        const telnyxClient = new Telnyx(apiKey);
+        const messageText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+        try {
+          const telnyxResult = await telnyxClient.messages.create({
+            from: telnyxNumber,
+            to: subscriber.phone_number,
+            text: messageText,
+          } as any);
+          console.log(`[DELETE /api/subscribers/:id] Telnyx API response:`, JSON.stringify(telnyxResult, null, 2));
+        } catch (err) {
+          console.error(`[DELETE /api/subscribers/:id] Telnyx API error:`, err);
+        }
+        // Log the message in delivery logs
+        await storage.createDeliveryLog({
+          message_id: null, // Not from messages table
+          subscriber_id: subscriber.id,
+          status: "sent",
+          direction: "outbound",
+          message_text: messageText,
+          name: subscriber.name || null,
+          phone_number: subscriber.phone_number,
+        });
+      }
+
       await storage.deleteSubscriber(id);
       res.json({ message: "Subscriber deleted successfully" });
     } catch (error) {
@@ -463,16 +541,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name = subscriber.name;
         }
 
-        await storage.createDeliveryLog({
-          message_id: null, // If you have message_id, pass it here
-          subscriber_id: subscriber ? subscriber.id : null,
-          status,
-          telnyx_message_id: telnyxMessageId,
-          direction: "outbound",
-          message_text: text,
-          name,
-          phone_number,
-        });
+        // Update the original delivery log row (status 'sent') to the final status
+        // Try to match by phone_number and message_text, and status 'sent'
+        // If you have message_id or telnyx_message_id, you can use those as well
+        const { error: updateError } = await storageModule.supabase
+          .from('delivery_logs')
+          .update({
+            status,
+            telnyx_message_id: telnyxMessageId
+          })
+          .match({
+            phone_number,
+            message_text: text,
+            status: 'sent',
+            direction: 'outbound'
+          });
+
+        if (updateError) {
+          console.error('Failed to update delivery log status:', updateError);
+          // Optionally, fall back to inserting a new log if update fails
+          await storage.createDeliveryLog({
+            message_id: null, // If you have message_id, pass it here
+            subscriber_id: subscriber ? subscriber.id : null,
+            status,
+            telnyx_message_id: telnyxMessageId,
+            direction: "outbound",
+            message_text: text,
+            name,
+            phone_number,
+          });
+        }
       }
 
       if (data && data.event_type === "message.received") {
