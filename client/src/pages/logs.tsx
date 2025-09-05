@@ -33,7 +33,7 @@ export default function Logs() {
   const statusOptions = Array.from(
     new Set(
       logs
-        .filter((log: any) => log.direction === 'outbound')
+        .filter((log: any) => log.direction === 'outbound' && log.message_id)
         .map((log: any) => log.status)
         .filter(Boolean)
     )
@@ -73,17 +73,19 @@ export default function Logs() {
   let messageDropdownOptions: any[] = [];
   if (direction === 'lht' && messagesData) {
     const messages = messagesData.map((msg: any) => {
-      const msgLogs = logs.filter((log: any) => log.message_id === msg.id).map((log: any) => {
-        let subscriber = null;
-        if (subscribersData) {
-          subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
-        }
-        return {
-          ...log,
-          subscriber_name: subscriber?.name || "N/A",
-          subscriber_phone: subscriber?.phone_number || log.subscriber_id || "N/A",
-        };
-      });
+      const msgLogs = logs
+        .filter((log: any) => log.message_id === msg.id && log.direction === 'outbound' && log.message_id)
+        .map((log: any) => {
+          let subscriber = null;
+          if (subscribersData) {
+            subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
+          }
+          return {
+            ...log,
+            subscriber_name: subscriber?.name || "N/A",
+            subscriber_phone: subscriber?.phone_number || log.subscriber_id || "N/A",
+          };
+        });
       return {
         message_id: msg.id,
         message_text: msg.body,
@@ -91,7 +93,11 @@ export default function Logs() {
         logs: msgLogs,
       };
     });
-    filteredMessages = messages;
+    filteredMessages = messages.flatMap((msg: any) => msg.logs.map((log: any) => ({
+      ...log,
+      message_text: msg.message_text,
+      sent_at: msg.sent_at,
+    })));
     messageDropdownOptions = messages.map((msg: any) => ({
       value: msg.message_text,
       label: msg.message_text,
@@ -108,64 +114,30 @@ export default function Logs() {
     }));
   } else if (direction === 'inbound') {
     const inboundLogs = logs.filter((log: any) => log.direction === 'inbound').map((log: any) => {
-      let subscriber = null;
-      if (subscribersData) {
-        subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
-      }
+      const subscriber = subscribersData?.find((sub: any) => sub.id === log.subscriber_id);
       return {
         ...log,
-        name: subscriber?.name || log.name || "",
-        phone_number: subscriber?.phone_number || log.phone_number || "",
+        name: subscriber?.name || log.name || "Unknown",
+        phone_number: log.phone_number || "Unknown",
+        received_at: log.updated_at, // Ensure updated_at is used
+        status: log.status || "Unknown",
       };
     });
-    const grouped: Record<string, any> = {};
-    inboundLogs.forEach((log: any) => {
-      if (log.status === 'pending') return;
-      if (!grouped[log.message_text]) {
-        grouped[log.message_text] = {
-          message_text: log.message_text,
-          logs: [],
-        };
-      }
-      grouped[log.message_text].logs.push(log);
-    });
-    filteredMessages = Object.values(grouped);
-    messageDropdownOptions = Object.values(grouped).map((msg: any) => ({
-      value: msg.message_text,
-      label: msg.message_text,
-      date: msg.logs.length > 0
-        ? new Date(Math.max(...msg.logs.map((log: any) => new Date(log.updated_at).getTime()))).toLocaleString(undefined, {
-            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-          })
-        : '',
-    }));
+    console.log('Inbound Logs:', inboundLogs); // Debug log
+    filteredMessages = inboundLogs;
   } else if (direction === 'outbound') {
-    const outboundLogs = logs
-      .filter((log: any) => log.direction === 'outbound' && !messagesData?.some((msg: any) => msg.id === log.message_id))
-      .map((log: any) => {
-        let subscriber = null;
-        if (subscribersData) {
-          subscriber = subscribersData.find((sub: any) => sub.id === log.subscriber_id);
-        }
-        return {
-          ...log,
-          name: subscriber?.name || log.name || "",
-          phone_number: subscriber?.phone_number || log.phone_number || "",
-          message_text: log.message_text,
-          sent_at: log.updated_at,
-          status: log.status,
-        };
-      });
+    const outboundLogs = logs.filter((log: any) => log.direction === 'outbound' && log.message_id === null).map((log: any) => {
+      const subscriber = subscribersData?.find((sub: any) => sub.id === log.subscriber_id);
+      return {
+        ...log,
+        name: subscriber?.name || log.name || "Unknown",
+        phone_number: log.phone_number || "Unknown",
+        sent_at: log.updated_at, // Ensure updated_at is used
+        status: log.status || "Unknown",
+      };
+    });
+    console.log('Outbound Logs:', outboundLogs); // Debug log
     filteredMessages = outboundLogs;
-    messageDropdownOptions = outboundLogs.map((log: any) => ({
-      value: log.message_text,
-      label: log.message_text,
-      date: log.sent_at
-        ? new Date(log.sent_at).toLocaleString(undefined, {
-            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-          })
-        : '',
-    }));
   }
 
   // Aggregate logs by message_id, join with subscribers for name/phone
@@ -255,9 +227,12 @@ export default function Logs() {
     });
   }
 
-  // Add debug logs to trace current_active_subscribers
-  console.log('Filtered Messages:', filteredMessages);
-  console.log('Message Dropdown Options:', messageDropdownOptions);
+  // Debug logs after initialization
+  console.log('Logs Data:', logs);
+  console.log('Subscribers Data:', subscribersData);
+  if (direction === 'inbound' || direction === 'outbound') {
+    console.log('Filtered Messages:', filteredMessages);
+  }
 
   // Ensure delivered_count and current_active_subscribers are included and defaulted
   filteredMessages = filteredMessages.map((msg: any) => ({
@@ -277,6 +252,12 @@ export default function Logs() {
       };
     });
   }
+
+  // Ensure all dropdown options have a non-empty value prop to prevent runtime errors.
+  messageDropdownOptions = messageDropdownOptions.filter((option) => option.value !== '0').map((option) => ({
+    ...option,
+    label: option.label.replace('All Messages', 'All Subscribers'),
+  }));
 
   return (
     <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-8 px-2">
@@ -471,17 +452,23 @@ export default function Logs() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
                     <TableHead className="text-base font-semibold text-foreground">Name</TableHead>
                     <TableHead className="text-base font-semibold text-foreground">Phone Number</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">Received At</TableHead>
-                    <TableHead className="text-base font-semibold text-center text-foreground">Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredMessages.map((msg: any) => {
+                    // Adding debug logs to inspect the entire message object and logs array
+                    console.log('Message object:', msg); // Debug log to inspect the message object
+                    console.log('Logs array:', logs); // Debug log to inspect the logs array
                     const msgLogs = Array.isArray(msg.logs) ? msg.logs : [];
-                    const receivedAt = msgLogs.length > 0 ? new Date(Math.max(...msgLogs.map((log: any) => new Date(log.updated_at).getTime()))).toLocaleString(undefined, {
+                    const receivedAt = msgLogs.length > 0 ? new Date(Math.max(...msgLogs.map((log: any) => {
+                      console.log('Log in map:', log); // Debug log to inspect each log
+                      console.log('Log updated_at:', log.updated_at); // Debug log to inspect updated_at
+                      return new Date(log.updated_at).getTime();
+                    }))).toLocaleString(undefined, {
                       month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
                     }) : '';
                     const firstLog = msgLogs[0] || {};
