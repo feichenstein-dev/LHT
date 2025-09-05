@@ -582,67 +582,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const apiKey = process.env.TELNYX_API_KEY;
         const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
 
+        // Always log the inbound message, with subscriber_id if found
+        let subscriber = await storage.getSubscriberByPhone(from);
+        await storage.createDeliveryLog({
+          message_id: null,
+          subscriber_id: subscriber ? subscriber.id : null,
+          status: "received",
+          direction: "inbound",
+          message_text: text,
+          name: subscriber ? subscriber.name : null,
+          phone_number: from,
+        });
+
+        // JOIN keyword logic
         if (joinMatch) {
           name = joinMatch[1].trim();
           if (name === "") name = null;
-          const existing = await storage.getSubscriberByPhone(from);
-          if (!existing) {
+          if (!subscriber) {
             await storage.createSubscriber({ phone_number: from, name });
+            subscriber = await storage.getSubscriberByPhone(from);
           } else {
-            if (name && name !== existing.name) {
+            if (name && name !== subscriber.name) {
               const now = new Date().toISOString();
               await storageModule.supabase
                 .from('subscribers')
                 .update({ name, updated_at: now })
-                .eq('id', existing.id);
+                .eq('id', subscriber.id);
+              subscriber = await storage.getSubscriberByPhone(from);
             }
-            if (existing.status !== 'active') {
+            if (subscriber && subscriber.status !== 'active') {
               const now = new Date().toISOString();
               await storageModule.supabase
                 .from('subscribers')
                 .update({ status: 'active', updated_at: now })
-                .eq('id', existing.id);
+                .eq('id', subscriber.id);
+              subscriber = await storage.getSubscriberByPhone(from);
             }
           }
-          await storage.createDeliveryLog({
-            message_id: null, // Not from messages table
-            subscriber_id: existing ? existing.id : null,
-            status: "received",
-            direction: "inbound",
-            message_text: text,
-            name,
-            phone_number: from,
-          });
+          // Log the welcome reply (outbound)
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
+            const replyText = `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`;
             await telnyxClient.messages.create({
               from: telnyxNumber,
               to: from,
-              text: `Welcome! You are now subscribed to Lashon Hara Texts. Reply HELP for info or STOP to unsubscribe.`
+              text: replyText
             } as any);
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "sent",
+              direction: "outbound",
+              message_text: replyText,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
           }
         }
+
+        // HELP keyword logic
         if (text.match(/^help$/i)) {
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
+            const replyText = `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
             await telnyxClient.messages.create({
               from: telnyxNumber,
               to: from,
-              text: `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`
+              text: replyText
             } as any);
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "sent",
+              direction: "outbound",
+              message_text: replyText,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
           }
         }
+
+        // STOP keyword logic
         if (stopMatch) {
-          const existing = await storage.getSubscriberByPhone(from);
-          if (existing && existing.status === 'active') {
-            await storage.deleteSubscriber(existing.id);
+          if (subscriber && subscriber.status === 'active') {
+            await storage.deleteSubscriber(subscriber.id);
             if (apiKey && telnyxNumber) {
               const telnyxClient = new Telnyx(apiKey);
+              const replyText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
               await telnyxClient.messages.create({
                 from: telnyxNumber,
                 to: from,
-                text: `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`
+                text: replyText
               } as any);
+              await storage.createDeliveryLog({
+                message_id: null,
+                subscriber_id: subscriber ? subscriber.id : null,
+                status: "sent",
+                direction: "outbound",
+                message_text: replyText,
+                name: subscriber ? subscriber.name : null,
+                phone_number: from,
+              });
             }
           }
         }
