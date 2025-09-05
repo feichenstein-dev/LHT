@@ -188,12 +188,12 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '70%' }}>
+            <div style={{ flexBasis: '100%', maxWidth: '100%' }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full min-w-[320px] max-w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
-                <SelectContent className="w-full">
+                <SelectContent className="w-full min-w-[320px] max-w-full">
                   <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
                   {dropdownOptions.map((opt, idx) => (
                     <SelectItem key={idx} value={opt.value} className="w-full">{opt.label}</SelectItem>
