@@ -161,14 +161,14 @@ export default function Logs() {
   }
 
   return (
-    <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-8 px-2">
-      <Card className="w-full max-w-full mx-auto">
+    <div className="flex flex-col items-center w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-1 md:py-8 md:px-2">
+      <Card className="w-full max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
+          <CardTitle className="text-xl md:text-2xl font-semibold">Delivery Logs</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-row gap-4 mb-6 w-full">
-            <div style={{ flexBasis: '20%' }}>
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4 mb-4 md:mb-6 w-full">
+            <div className="w-full md:w-1/5">
               <Select
                 value={direction}
                 onValueChange={v => {
@@ -188,12 +188,12 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '100%', maxWidth: '100%' }}>
+            <div className="w-full md:w-3/5">
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-                <SelectTrigger className="w-full min-w-[320px] max-w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full min-w-[220px] md:min-w-[320px] max-w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
-                <SelectContent className="w-full min-w-[320px] max-w-full">
+                <SelectContent className="w-full min-w-[220px] md:min-w-[320px] max-w-full">
                   <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
                   {dropdownOptions.map((opt, idx) => (
                     <SelectItem key={idx} value={opt.value} className="w-full">{opt.label}</SelectItem>
@@ -201,7 +201,7 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '10%' }}>
+            <div className="w-full md:w-1/5">
               <input
                 type="date"
                 className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
@@ -230,8 +230,8 @@ export default function Logs() {
                   {groupedLHT.map((msg: any) => (
                     <>
                       <TableRow key={msg.message_id}>
-                        <TableCell className="w-[45%] truncate text-base" title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
-                        <TableCell className="text-sm" style={{ color: 'black' }}>{formatDate(msg.sent_at)}</TableCell>
+                        <TableCell className="truncate text-base max-w-[220px] md:max-w-[350px]" title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
+                        <TableCell className="text-sm whitespace-nowrap" style={{ color: 'black' }}>{formatDate(msg.sent_at)}</TableCell>
                         {statusOptions.map((status, idx) => (
                           <TableCell key={idx} className="text-center font-semibold text-base text-foreground">{statusCountsByMsg[msg.message_id]?.[status] || 0}</TableCell>
                         ))}
@@ -270,9 +270,9 @@ export default function Logs() {
                                         const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
                                         return (
                                           <TableRow key={log.id} className="hover:bg-gray-200">
-                                            <TableCell className="font-normal" style={{ width: '30%' }}>{sub?.name || log.name || "N/A"}</TableCell>
-                                            <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
-                                            <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
+                                            <TableCell className="font-normal max-w-[120px] md:max-w-[220px] whitespace-nowrap overflow-hidden text-ellipsis">{sub?.name || log.name || "N/A"}</TableCell>
+                                            <TableCell className="font-normal max-w-[120px] md:max-w-[180px] whitespace-nowrap overflow-hidden text-ellipsis">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
+                                            <TableCell className="text-left font-normal whitespace-nowrap">{formatDate(log.updated_at)}</TableCell>
                                             <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
                                             {/* Action column removed */}
                                           </TableRow>
