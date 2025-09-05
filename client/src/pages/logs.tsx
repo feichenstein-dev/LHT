@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatPhoneNumber } from "@/lib/supabase";
 import { Eye } from "lucide-react";
+import { useToast } from "../hooks/use-toast";
 
 function formatDate(dateStr: string) {
   if (!dateStr) return "";
@@ -29,6 +30,8 @@ export default function Logs() {
     return localStorage.getItem('logs_filterDate') || "";
   });
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
+  const { toast } = useToast ? useToast() : { toast: () => {} };
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   // Persist dropdowns
   const persist = (key: string, value: string) => {
@@ -165,41 +168,47 @@ export default function Logs() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-row gap-4 mb-6 w-full">
-            <Select
-              value={direction}
-              onValueChange={v => {
-                setDirection(v as any);
-                persist('logs_direction', v);
-                setSelected('all');
-                persist('logs_selected', 'all');
-              }}
-            >
-              <SelectTrigger className="w-60 h-12 text-base bg-muted rounded-2xl px-4">
-                <SelectValue placeholder="Direction" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lht">Sefer Chofetz Chaim Texts</SelectItem>
-                <SelectItem value="inbound">Inbound</SelectItem>
-                <SelectItem value="outbound">Outbound</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-              <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
-                <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
-                {dropdownOptions.map((opt, idx) => (
-                  <SelectItem key={idx} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <input
-              type="date"
-              className="w-40 h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
-              value={filterDate}
-              onChange={e => { setFilterDate(e.target.value); persist('logs_filterDate', e.target.value); }}
-            />
+            <div style={{ flexBasis: '20%' }}>
+              <Select
+                value={direction}
+                onValueChange={v => {
+                  setDirection(v as any);
+                  persist('logs_direction', v);
+                  setSelected('all');
+                  persist('logs_selected', 'all');
+                }}
+              >
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lht">Sefer Chofetz Chaim Texts</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flexBasis: '70%' }}>
+              <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                  <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
+                </SelectTrigger>
+                <SelectContent className="w-full">
+                  <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
+                  {dropdownOptions.map((opt, idx) => (
+                    <SelectItem key={idx} value={opt.value} className="w-full">{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flexBasis: '10%' }}>
+              <input
+                type="date"
+                className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
+                value={filterDate}
+                onChange={e => { setFilterDate(e.target.value); persist('logs_filterDate', e.target.value); }}
+              />
+            </div>
           </div>
           <div className="bg-background rounded-xl shadow-md w-full overflow-x-auto" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
             {isLoading ? (
@@ -242,14 +251,18 @@ export default function Logs() {
                                 <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '98%', padding: '15px' }}>
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
                                   <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
+                                  <p className="text-sm mb-4">
+                                      <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[\u0590-\u05FF]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
+                                  </p>
                                   <p className="text-sm mb-4"><strong>Sent To:</strong> {`${msg.delivered_count || 0} delivered / ${msg.current_active_subscribers || 0} active subscribers`}</p>
                                   <Table className="w-full">
                                     <TableHeader>
                                       <TableRow>
-                                        <TableHead className="text-base font-semibold text-left text-foreground">Name</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ width: '30%' }}>Name</TableHead>
                                         <TableHead className="text-base font-semibold text-left text-foreground">Phone Number</TableHead>
                                         <TableHead className="text-base font-semibold text-left text-foreground">Sent At</TableHead>
                                         <TableHead className="text-base font-semibold text-left text-foreground">Status</TableHead>
+
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -257,10 +270,11 @@ export default function Logs() {
                                         const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
                                         return (
                                           <TableRow key={log.id} className="hover:bg-gray-200">
-                                            <TableCell className="font-normal">{sub?.name || log.name || "N/A"}</TableCell>
+                                            <TableCell className="font-normal" style={{ width: '30%' }}>{sub?.name || log.name || "N/A"}</TableCell>
                                             <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
                                             <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
                                             <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
+                                            {/* Action column removed */}
                                           </TableRow>
                                         );
                                       })}
@@ -294,10 +308,12 @@ export default function Logs() {
                     return (
                       <TableRow key={log.id}>
                         <TableCell className="w-[45%] truncate text-base" title={log.message_text || ''}>{msgText}</TableCell>
-                        <TableCell className="font-normal">{sub?.name || log.name || ""}</TableCell>
+                        <TableCell className="w-font-normal">{sub?.name || log.name || ""}</TableCell>
                         <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ""}</TableCell>
                         <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
-                        <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
+                        <TableCell className="text-left font-normal flex items-center gap-2">
+                          <span>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</span>
+                        </TableCell>
                       </TableRow>
                     );
                   })}

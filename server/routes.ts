@@ -8,14 +8,6 @@ import { z } from "zod";
 import Telnyx from 'telnyx';
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Log all incoming requests for debugging
-  app.use((req, res, next) => {
-    console.log(`[INCOMING REQUEST] ${req.method} ${req.url}`);
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log('[REQUEST BODY]', JSON.stringify(req.body));
-    }
-    next();
-  });
   // Retry message endpoint
   app.post("/api/retry-message", async (req, res) => {
     try {
@@ -40,16 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text: message.body,
         webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
       } as any);
-      // Log retry attempt as 'sent' (will be updated by webhook)
-      await storage.createDeliveryLog({
-        message_id,
-        subscriber_id: null, // Could look up by phone_number if needed
-        status: "sent",
-        direction: "outbound",
-        message_text: message.body,
-        name: null,
-        phone_number: null
-      });
+  // Do not log delivery here; will be logged by webhook handler
       res.json({ success: true });
     } catch (error) {
       console.error("Error retrying message:", error);
@@ -86,100 +69,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send SMS to each subscriber via Telnyx
       const deliveryPromises = activeSubscribers.map(async (subscriber) => {
+  let status = "unknown";
+  let errorMsg = null;
+  let phone_number = subscriber && subscriber.phone_number ? subscriber.phone_number : null;
+  let name = subscriber && subscriber.name ? subscriber.name : null;
         try {
           if (!message) throw new Error('Message is undefined');
           const apiKey = process.env.TELNYX_API_KEY;
           const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
           if (!apiKey || !phoneNumber) {
-            throw new Error(`Missing Telnyx configuration: API_KEY=${!!apiKey}, PHONE=${!!phoneNumber}`);
+            errorMsg = `Missing Telnyx configuration: API_KEY=${!!apiKey}, PHONE=${!!phoneNumber}`;
+            status = "failed";
+            // Log to delivery log and terminal (only for config error)
+            await storage.createDeliveryLog({
+              phone_number: subscriber.phone_number,
+              name: subscriber.name || null,
+              message_text: message.body,
+              status,
+              error_message: errorMsg,
+              direction: "outbound",
+              telnyx_message_id: null,
+            });
+            console.error(`[BACKEND] FAILED: ${subscriber.phone_number} - ${errorMsg}`);
+            throw new Error(errorMsg);
           }
-          console.log(`Sending message to ${subscriber.phone_number} from ${phoneNumber}`);
-          console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
-          if (!apiKey.startsWith('KEY')) {
-            throw new Error(`Invalid Telnyx API key format. Must start with 'KEY'. Current format: ${apiKey.substring(0, 10)}... Get your key from https://portal.telnyx.com/#/app/api-keys`);
+          // Pre-send phone number validation (E.164, digits only, length 10-15, starts with '+')
+          const phoneRegex = /^\+[1-9]\d{9,14}$/;
+          if (!phoneRegex.test(subscriber.phone_number)) {
+            errorMsg = `Invalid phone number format for ${subscriber.phone_number}. Must be E.164 (e.g. +12345678901).`;
+            status = "invalid";
+            // Log to delivery log and terminal (only for invalid numbers)
+            await storage.createDeliveryLog({
+              phone_number: subscriber.phone_number,
+              name: subscriber.name || null,
+              message_text: message.body,
+              status,
+              error_message: errorMsg,
+              direction: "outbound",
+              telnyx_message_id: null,
+            });
+            console.warn(`[BACKEND] INVALID: ${subscriber.phone_number} - ${errorMsg}`);
+            throw new Error(errorMsg);
           }
-          const telnyxClient = new Telnyx(apiKey);
-          // Calculate the message length and log it
+          // Stricter check for obviously fake numbers (e.g. repeated digits)
+          if (/^(\+)(\d)\2{6,}$/.test(subscriber.phone_number)) {
+            errorMsg = `Suspicious/fake phone number detected: ${subscriber.phone_number}.`;
+            status = "invalid";
+            // Log to delivery log and terminal (only for invalid numbers)
+            await storage.createDeliveryLog({
+              phone_number: subscriber.phone_number,
+              name: subscriber.name || null,
+              message_text: message.body,
+              status,
+              error_message: errorMsg,
+              direction: "outbound",
+              telnyx_message_id: null,
+            });
+            console.warn(`[BACKEND] INVALID: ${subscriber.phone_number} - ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+          // Warn for other suspicious numbers (e.g. +111111111111)
+          if (/^\+1{5,}$/.test(subscriber.phone_number)) {
+            console.warn(`[BACKEND] WARNING: Suspicious phone number detected: ${subscriber.phone_number}`);
+          }
+          console.log(`[BACKEND] Attempting to send SMS to ${subscriber.phone_number}`);
+          // ...existing code for message length, encoding, limits...
           const messageLength = message.body.length;
-          console.log(`Message length: ${messageLength} characters`);
-
-          // Determine if the message contains Hebrew characters
           const containsHebrew = /[\u0590-\u05FF]/.test(message.body);
-
-          // Telnyx concatenated SMS limits
-          const maxParts = 10; // Maximum number of parts for concatenated SMS
-          const maxCharactersPerPart = containsHebrew ? 67 : 153; // UCS-2 for Hebrew, GSM-7 otherwise
+          const maxParts = 10;
+          const maxCharactersPerPart = containsHebrew ? 67 : 153;
           const maxCharacters = maxParts * maxCharactersPerPart;
-
-          console.log(`Message encoding: ${containsHebrew ? 'UCS-2 (Hebrew)' : 'GSM-7'}`);
-          console.log(`Character limit: ${maxCharacters} characters`);
-
-          // Prevent sending if the message exceeds the dynamic limit
           if (messageLength > maxCharacters) {
-            console.error(`Message exceeds the Telnyx limit of ${maxCharacters} characters. Cannot send.`);
-            throw new Error(`Message exceeds the Telnyx limit of ${maxCharacters} characters. Cannot send.`);
+            errorMsg = `Message exceeds the Telnyx limit of ${maxCharacters} characters. Cannot send.`;
+            status = "failed";
+            throw new Error(errorMsg);
           }
-
-          // Construct the SMS payload
           const msgPayload = {
             from: phoneNumber,
             to: subscriber.phone_number,
             text: message.body,
             webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`
           };
-
-          // Log the payload being sent to Telnyx for debugging
-          console.log(`Telnyx payload for ${subscriber.phone_number}:`, JSON.stringify(msgPayload, null, 2));
-
-          // Send the SMS
-          const response = await telnyxClient.messages.create(msgPayload as any);
-          console.log(`Telnyx API response for ${subscriber.phone_number}:`, JSON.stringify(response, null, 2));
-
-          if (response.data && response.data.errors && response.data.errors.length > 0) {
-            console.error(`Telnyx blocked the message to ${subscriber.phone_number}:`, JSON.stringify(response.data.errors, null, 2));
-          }
-          // Ensure all delivery events are logged
-          await storage.createDeliveryLog({
-            message_id: message.id,
-            subscriber_id: subscriber.id,
-            status: "sent", // Log as sent initially
-            direction: "outbound",
-            message_text: message.body,
-            name: subscriber.name || null,
-            phone_number: subscriber.phone_number || null,
-          });
-          // Do not log delivery until webhook returns final status
-          return { success: true, subscriber: subscriber.phone_number };
-        } catch (error) {
-          let errorMsg = '';
-          if (error && typeof error === 'object' && 'raw' in error && error.raw && typeof error.raw === 'object') {
-            const raw = error.raw as any;
-            if (Array.isArray(raw.errors) && raw.errors.length > 0) {
-              errorMsg = raw.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
-            } else if (raw.errors) {
-              errorMsg = JSON.stringify(raw.errors);
-            } else {
-              errorMsg = JSON.stringify(raw);
+          console.log(`[BACKEND] Telnyx payload for ${subscriber.phone_number}:`, JSON.stringify(msgPayload, null, 2));
+          try {
+            const telnyxResponse = await new Telnyx(apiKey).messages.create(msgPayload as any);
+            if (telnyxResponse.data && telnyxResponse.data.errors && telnyxResponse.data.errors.length > 0) {
+              errorMsg = `Telnyx blocked the message to ${subscriber.phone_number}: ${JSON.stringify(telnyxResponse.data.errors, null, 2)}`;
+              status = "failed";
+              throw new Error(errorMsg);
             }
-          } else if (error instanceof Error) {
-            errorMsg = error.message;
-          } else {
-            errorMsg = 'Unknown error';
+            // If no errors, log as sent
+            status = "sent";
+            errorMsg = null;
+            console.log(`[BACKEND] Telnyx accepted message to ${subscriber.phone_number}: marked as SENT (awaiting webhook)`);
+          } catch (error) {
+            if (!errorMsg) {
+              if (error && typeof error === 'object' && 'raw' in error && error.raw && typeof error.raw === 'object') {
+                const raw = error.raw as any;
+                if (Array.isArray(raw.errors) && raw.errors.length > 0) {
+                  errorMsg = raw.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+                } else if (raw.errors) {
+                  errorMsg = JSON.stringify(raw.errors);
+                } else {
+                  errorMsg = JSON.stringify(raw);
+                }
+              } else if (error instanceof Error) {
+                errorMsg = error.message;
+              } else {
+                errorMsg = 'Unknown error';
+              }
+              status = "failed";
+            }
+            console.error(`[BACKEND] Telnyx API Error (BULK): ${errorMsg}`);
           }
-          console.error(`Failed to send to ${subscriber.phone_number}:`, errorMsg);
-          if (message) {
-            await storage.createDeliveryLog({
-              message_id: message.id,
-              subscriber_id: subscriber.id,
-              status: "failed",
-              direction: "outbound",
-              message_text: message.body,
-              name: subscriber.name || null,
-              phone_number: subscriber.phone_number || null,
-            });
+        } catch (error) {
+          if (!errorMsg) {
+            if (error && typeof error === 'object' && 'raw' in error && error.raw && typeof error.raw === 'object') {
+              const raw = error.raw as any;
+              if (Array.isArray(raw.errors) && raw.errors.length > 0) {
+                errorMsg = raw.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+              } else if (raw.errors) {
+                errorMsg = JSON.stringify(raw.errors);
+              } else {
+                errorMsg = JSON.stringify(raw);
+              }
+            } else if (error instanceof Error) {
+              errorMsg = error.message;
+            } else {
+              errorMsg = 'Unknown error';
+            }
+            status = status === "unknown" ? "failed" : status;
           }
-          return { success: false, subscriber: subscriber.phone_number, error: errorMsg };
         }
+        // Do not create delivery log here for sent messages; only after webhook or timeout
+        if (status === "sent") {
+          // Schedule a fallback to create an 'invalid' delivery log if no webhook in 1 minute
+          if (message && message.body) {
+            setTimeout(async () => {
+              // Check if a delivery log exists for this message/phone with status delivered/failed
+              const { data: logs, error: fetchError } = await storageModule.supabase
+                .from('delivery_logs')
+                .select('*')
+                .eq('phone_number', phone_number)
+                .eq('message_text', message.body)
+                .eq('direction', 'outbound');
+              const hasFinal = logs && logs.some((log: any) => log.status === 'delivered' || log.status === 'failed');
+              if (!hasFinal) {
+                await storage.createDeliveryLog({
+                  phone_number: phone_number,
+                  name: name,
+                  message_text: message.body,
+                  status: 'invalid',
+                  error_message: 'No webhook received from Telnyx after 1 minute',
+                  direction: 'outbound',
+                  telnyx_message_id: null,
+                });
+                console.warn(`[BACKEND] Fallback: Marked as INVALID for ${phone_number} (no webhook after 1 minute)`);
+              }
+            }, 60000);
+          }
+        }
+        return { success: status === "sent", subscriber: phone_number, error: errorMsg };
       });
 
       const results = await Promise.all(deliveryPromises);
@@ -229,7 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating message:", error);
       if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid message data", errors: error.errors });
+        res.status(400).json({ message: "invalid message data", errors: error.errors });
       } else {
         res.status(500).json({ message: "Failed to create message" });
       }
@@ -262,7 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating subscriber:", error);
       if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid subscriber data", errors: error.errors });
+        res.status(400).json({ message: "invalid subscriber data", errors: error.errors });
       } else {
         res.status(500).json({ message: "Failed to create subscriber" });
       }
@@ -276,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.body;
 
       if (!status || (status !== "active" && status !== "inactive")) {
-        return res.status(400).json({ message: "Invalid status value" });
+        return res.status(400).json({ message: "invalid status value" });
       }
 
       // Fetch the current subscriber to check previous status
@@ -332,17 +382,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`[PATCH /api/subscribers/:id] Telnyx API response:`, JSON.stringify(telnyxResult, null, 2));
           } catch (err) {
             console.error(`[PATCH /api/subscribers/:id] Telnyx API error:`, err);
+            // Log delivery as invalid if Telnyx API error
+            await storage.createDeliveryLog({
+              phone_number: updatedSubscriber.phone_number,
+              name: updatedSubscriber.name || null,
+              message_text: messageText,
+              status: 'invalid',
+              error_message: err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err),
+              direction: 'outbound',
+              telnyx_message_id: null,
+            });
           }
-          // Log the message in delivery logs
-          await storage.createDeliveryLog({
-            message_id: null, // Not from messages table
-            subscriber_id: updatedSubscriber.id,
-            status: "sent",
-            direction: "outbound",
-            message_text: messageText,
-            name: updatedSubscriber.name || null,
-            phone_number: updatedSubscriber.phone_number,
-          });
+          // Do not log delivery here; will be logged by webhook handler
         }
       }
 
@@ -380,17 +431,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[DELETE /api/subscribers/:id] Telnyx API response:`, JSON.stringify(telnyxResult, null, 2));
         } catch (err) {
           console.error(`[DELETE /api/subscribers/:id] Telnyx API error:`, err);
+          // Log delivery as invalid if Telnyx API error
+          await storage.createDeliveryLog({
+            phone_number: subscriber.phone_number,
+            name: subscriber.name || null,
+            message_text: messageText,
+            status: 'invalid',
+            error_message: err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err),
+            direction: 'outbound',
+            telnyx_message_id: null,
+          });
         }
-        // Log the message in delivery logs
-        await storage.createDeliveryLog({
-          message_id: null, // Not from messages table
-          subscriber_id: subscriber.id,
-          status: "sent",
-          direction: "outbound",
-          message_text: messageText,
-          name: subscriber.name || null,
-          phone_number: subscriber.phone_number,
-        });
+        // Do not log delivery here; will be logged by webhook handler
       }
 
       await storage.deleteSubscriber(id);
@@ -466,7 +518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check API key format
       if (!apiKey.startsWith('KEY')) {
         return res.status(400).json({ 
-          error: "Invalid API key format. Telnyx API keys should start with 'KEY'",
+          error: "invalid API key format. Telnyx API keys should start with 'KEY'",
           current: `${apiKey.substring(0, 10)}...`,
           hint: "Get your API key from https://portal.telnyx.com/#/app/api-keys"
         });
@@ -497,10 +549,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Telnyx webhook endpoint for delivery status updates
   app.post("/api/webhooks/telnyx", async (req, res) => {
     try {
-      console.log('Telnyx webhook received:', JSON.stringify(req.body, null, 2));
+      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+      const apiKey = process.env.TELNYX_API_KEY;
+      console.log('========== Telnyx Webhook Received ==========');
+      console.log('[BACKEND] Raw webhook body:', JSON.stringify(req.body, null, 2));
       const { data } = req.body;
+      if (data) {
+        console.log('[BACKEND] Webhook event_type:', data.event_type);
+        if (data.payload) {
+          console.log('[BACKEND] Webhook payload:', JSON.stringify(data.payload, null, 2));
+        }
+      }
 
       if (data && data.event_type === "message.finalized") {
+        console.log('Processing message.finalized webhook...');
         const {
           id: telnyxMessageId,
           to,
@@ -541,14 +603,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name = subscriber.name;
         }
 
+        // Extract error code and message if present
+        let errorMessage = null;
+        let errorCode = null;
+        if (data.payload.errors && Array.isArray(data.payload.errors) && data.payload.errors.length > 0) {
+          errorMessage = data.payload.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+          errorCode = data.payload.errors.map((e: any) => e.code || '').filter(Boolean).join('; ');
+        } else if (data.payload.error_code) {
+          errorCode = data.payload.error_code;
+        }
+        let combinedError = null;
+        if (errorCode && errorMessage) {
+          combinedError = `Code: ${errorCode} | Message: ${errorMessage}`;
+        } else if (errorCode) {
+          combinedError = `Code: ${errorCode}`;
+        } else if (errorMessage) {
+          combinedError = errorMessage;
+        }
+
+        // Log delivery status updates for messages sent from your Telnyx number
+        if (typeof from === 'string' && from === telnyxNumber) {
+          console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
+        }
+
         // Update the original delivery log row (status 'sent') to the final status
         // Try to match by phone_number and message_text, and status 'sent'
         // If you have message_id or telnyx_message_id, you can use those as well
+        console.log('[BACKEND] Attempting to update delivery log for phone:', phone_number, '| message_text:', text);
+        console.log('[BACKEND] Writing status:', status, '| Error:', combinedError);
         const { error: updateError } = await storageModule.supabase
           .from('delivery_logs')
           .update({
             status,
-            telnyx_message_id: telnyxMessageId
+            telnyx_message_id: telnyxMessageId,
+            error_message: combinedError
           })
           .match({
             phone_number,
@@ -558,7 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
         if (updateError) {
-          console.error('Failed to update delivery log status:', updateError);
+          console.error('[BACKEND] Failed to update delivery log status:', updateError);
           // Optionally, fall back to inserting a new log if update fails
           await storage.createDeliveryLog({
             message_id: null, // If you have message_id, pass it here
@@ -569,19 +657,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message_text: text,
             name,
             phone_number,
+            error_message: combinedError
           });
+          console.log('[BACKEND] Inserted new delivery log due to update failure.');
+        } else {
+          console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
         }
       }
 
       if (data && data.event_type === "message.received") {
         const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
         const text = data.payload.text;
+        // Log if the inbound message is from your Telnyx number
+        if (from === telnyxNumber) {
+          console.warn('[BACKEND] Inbound SMS is from your own Telnyx number:', from);
+        }
+        console.log('[BACKEND] Inbound SMS received:');
+        console.log('  From:', from);
+        console.log('  Text:', text);
+        console.log('  Full payload:', JSON.stringify(data.payload, null, 2));
         const joinMatch = text.match(/^join(.*)$/i);
         const stopMatch = text.match(/^stop$/i);
         const startMatch = text.match(/^start$/i);
         let name = null;
-        const apiKey = process.env.TELNYX_API_KEY;
-        const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
         let subscriber = await storage.getSubscriberByPhone(from);
 
         // Always log the inbound message ONCE, before any keyword logic
@@ -624,20 +722,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-            await telnyxClient.messages.create({
-              from: telnyxNumber,
-              to: from,
-              text: replyText
-            } as any);
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "sent",
-              direction: "outbound",
-              message_text: replyText,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
+            console.log('[BACKEND] Sending JOIN reply to', from);
+            try {
+              const telnyxResponse = await telnyxClient.messages.create({
+                from: telnyxNumber,
+                to: from,
+                text: replyText
+              } as any);
+              console.log('[BACKEND] Telnyx API Outbound Response (JOIN):', JSON.stringify(telnyxResponse, null, 2));
+            } catch (err) {
+              console.error('[BACKEND] Telnyx API Error (JOIN):', err);
+              await storage.createDeliveryLog({
+                phone_number: from,
+                name: subscriber?.name || null,
+                message_text: replyText,
+                status: 'invalid',
+                error_message: err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err),
+                direction: 'outbound',
+                telnyx_message_id: null,
+              });
+            }
+            // Do not log delivery here; will be logged by webhook handler
           }
         }
         // START keyword logic (unblock and send welcome)
@@ -648,20 +753,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-            await telnyxClient.messages.create({
-              from: telnyxNumber,
-              to: from,
-              text: replyText
-            } as any);
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "sent",
-              direction: "outbound",
-              message_text: replyText,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
+            console.log('[BACKEND] Sending START reply to', from);
+            try {
+              const telnyxResponse = await telnyxClient.messages.create({
+                from: telnyxNumber,
+                to: from,
+                text: replyText
+              } as any);
+              console.log('[BACKEND] Telnyx API Outbound Response (START):', JSON.stringify(telnyxResponse, null, 2));
+            } catch (err) {
+              console.error('[BACKEND] Telnyx API Error (START):', err);
+              await storage.createDeliveryLog({
+                phone_number: from,
+                name: subscriber?.name || null,
+                message_text: replyText,
+                status: 'invalid',
+                error_message: err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err),
+                direction: 'outbound',
+                telnyx_message_id: null,
+              });
+            }
+            // Do not log delivery here; will be logged by webhook handler
           }
         }
         // HELP keyword logic
@@ -669,20 +781,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `You are currently subscribed to Sefer Chofetz Chaim Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
-            await telnyxClient.messages.create({
-              from: telnyxNumber,
-              to: from,
-              text: replyText
-            } as any);
-            await storage.createDeliveryLog({
-              message_id: null,
-              subscriber_id: subscriber ? subscriber.id : null,
-              status: "sent",
-              direction: "outbound",
-              message_text: replyText,
-              name: subscriber ? subscriber.name : null,
-              phone_number: from,
-            });
+            console.log('[BACKEND] Sending HELP reply to', from);
+            try {
+              const telnyxResponse = await telnyxClient.messages.create({
+                from: telnyxNumber,
+                to: from,
+                text: replyText
+              } as any);
+              console.log('[BACKEND] Telnyx API Outbound Response (HELP):', JSON.stringify(telnyxResponse, null, 2));
+            } catch (err) {
+              console.error('[BACKEND] Telnyx API Error (HELP):', err);
+              await storage.createDeliveryLog({
+                phone_number: from,
+                name: subscriber?.name || null,
+                message_text: replyText,
+                status: 'invalid',
+                error_message: err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err),
+                direction: 'outbound',
+                telnyx_message_id: null,
+              });
+            }
+            // Do not log delivery here; will be logged by webhook handler
           }
         }
         // STOP keyword logic
@@ -704,8 +823,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(200).json({ received: true });
     } catch (error) {
-      console.error("Error processing Telnyx webhook:", error);
-      res.status(500).json({ message: "Failed to process webhook" });
+  console.error("Error processing Telnyx webhook:", error);
+  res.status(500).json({ message: "Failed to process webhook" });
+  console.log('========== End Telnyx Webhook ==========');
+  console.log('========== End Telnyx Webhook ==========');
     }
   });
 
@@ -720,7 +841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (email === envEmail && password === envPassword) {
       return res.json({ success: true });
     } else {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "invalid email or password" });
     }
   });
 
