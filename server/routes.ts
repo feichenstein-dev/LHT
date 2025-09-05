@@ -584,15 +584,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Always log the inbound message, with subscriber_id if found
         let subscriber = await storage.getSubscriberByPhone(from);
-        await storage.createDeliveryLog({
-          message_id: null,
-          subscriber_id: subscriber ? subscriber.id : null,
-          status: "received",
-          direction: "inbound",
-          message_text: text,
-          name: subscriber ? subscriber.name : null,
-          phone_number: from,
-        });
+        let logInbound = true;
 
         // JOIN keyword logic
         if (joinMatch) {
@@ -619,6 +611,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               subscriber = await storage.getSubscriberByPhone(from);
             }
           }
+          // Only log inbound once
+          if (logInbound) {
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "received",
+              direction: "inbound",
+              message_text: text,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
+            logInbound = false;
+          }
           // Log the welcome reply (outbound)
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
@@ -639,9 +644,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         }
-
         // HELP keyword logic
-        if (text.match(/^help$/i)) {
+        else if (text.match(/^help$/i)) {
+          // Only log inbound once
+          if (logInbound) {
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "received",
+              direction: "inbound",
+              message_text: text,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
+            logInbound = false;
+          }
           if (apiKey && telnyxNumber) {
             const telnyxClient = new Telnyx(apiKey);
             const replyText = `You are currently subscribed to Lashon Hara Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
@@ -661,29 +678,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         }
-
         // STOP keyword logic
-        if (stopMatch) {
-          if (subscriber && subscriber.status === 'active') {
-            await storage.deleteSubscriber(subscriber.id);
-            if (apiKey && telnyxNumber) {
-              const telnyxClient = new Telnyx(apiKey);
-              const replyText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
-              await telnyxClient.messages.create({
-                from: telnyxNumber,
-                to: from,
-                text: replyText
-              } as any);
-              await storage.createDeliveryLog({
-                message_id: null,
-                subscriber_id: subscriber ? subscriber.id : null,
-                status: "sent",
-                direction: "outbound",
-                message_text: replyText,
-                name: subscriber ? subscriber.name : null,
-                phone_number: from,
-              });
+        else if (stopMatch) {
+          // Only log inbound once
+          if (logInbound) {
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "received",
+              direction: "inbound",
+              message_text: text,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
+            logInbound = false;
+          }
+          let wasActive = subscriber && subscriber.status === 'active';
+          if (wasActive) {
+            if (subscriber) {
+              await storage.deleteSubscriber(subscriber.id);
             }
+          }
+          if (apiKey && telnyxNumber) {
+            const telnyxClient = new Telnyx(apiKey);
+            const replyText = `You have been unsubscribed from Lashon Hara Texts. Reply JOIN with your name to subscribe again.`;
+            await telnyxClient.messages.create({
+              from: telnyxNumber,
+              to: from,
+              text: replyText
+            } as any);
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "sent",
+              direction: "outbound",
+              message_text: replyText,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
+          }
+        }
+        // All other inbound messages
+        else {
+          // Only log inbound once
+          if (logInbound) {
+            await storage.createDeliveryLog({
+              message_id: null,
+              subscriber_id: subscriber ? subscriber.id : null,
+              status: "received",
+              direction: "inbound",
+              message_text: text,
+              name: subscriber ? subscriber.name : null,
+              phone_number: from,
+            });
+            logInbound = false;
           }
         }
       }
