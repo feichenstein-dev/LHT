@@ -20,10 +20,20 @@ function formatDate(dateStr: string) {
 }
 
 export default function Logs() {
-  // Inject custom styles for the datepicker clear button
+  // Inject custom styles for the datepicker clear button and disable pull-to-refresh/overscroll
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
+      html, body {
+        overscroll-behavior-y: contain !important;
+        overscroll-behavior-x: none !important;
+        touch-action: pan-x !important;
+      }
+      .logs-disable-overscroll {
+        overscroll-behavior: contain !important;
+        touch-action: pan-x !important;
+        -webkit-overflow-scrolling: auto !important;
+      }
       .react-datepicker__close-icon {
         right: 1.5rem !important;
         top: 50% !important;
@@ -53,14 +63,6 @@ export default function Logs() {
         margin: 0 auto;
         transition: background 0.15s, color 0.15s;
       }
-      // .react-datepicker__close-icon:hover::after {
-      //   color: #334155 !important; /* Tailwind slate-700 */
-      //   background: #e2e8f0 !important; /* Tailwind slate-100 */
-      //   display: flex;
-      //   align-items: center;
-      //   justify-content: center;
-      //   box-shadow: 0 0 0 2px #cbd5e1;
-      // }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
@@ -264,7 +266,7 @@ export default function Logs() {
   }
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2">
+  <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2 logs-disable-overscroll">
       <Card className="w-full max-w-screen-xl mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
