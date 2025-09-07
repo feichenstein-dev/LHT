@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-// ...removed useToast import...
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +11,7 @@ import type { Message, Subscriber } from "@shared/schema";
 
 type ExtendedMessage = Message & {
   current_active_subscribers?: number;
-  status: "delivered" | "failed" | "pending" | "unknown"; // Add "unknown" as a valid status
+  status: "delivered" | "failed" | "pending" | "unknown";
 };
 
 export default function Messages() {
@@ -29,13 +28,11 @@ export default function Messages() {
         .map((msg: ExtendedMessage) => ({
           ...msg,
           delivered_count: msg.delivered_count || 0,
-          current_active_subscribers: msg.current_active_subscribers || 0, // Explicitly include current_active_subscribers
-          status: msg.status || "unknown", // Default to "unknown" instead of "pending"
+          current_active_subscribers: msg.current_active_subscribers || 0,
+          status: msg.status || "unknown",
         }))
         .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime()),
   });
-
-  console.log('Processed Messages with current_active_subscribers:', messages); // Log processed messages
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
     queryKey: ["/api/subscribers"],
@@ -100,74 +97,73 @@ export default function Messages() {
     );
   }
 
-  // Add logs to ensure they are called when messages are loaded
-  console.log('Messages component rendered');
-  console.log('Messages API Response:', messages);
-  console.log('Subscribers API Response:', subscribers);
-
-  // Add logs to verify activeCount and deliveredCount values
-  console.log('MessageBubble activeCount and deliveredCount values:', messages.map(msg => ({
-    id: msg.id,
-    activeCount: msg.current_active_subscribers || 0,
-    deliveredCount: msg.delivered_count || 0
-  })));
-
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div
-        ref={chatContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-b from-muted/30 to-muted/10 p-4"
-        data-testid="chat-container"
-        style={{ maxHeight: "calc(100vh - 180px)" }}
-      >
-        <div className="space-y-4 max-w-4xl mx-auto">
-          {messages.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <div className="text-lg mb-2">No messages yet</div>
-              <div className="text-sm">Send your first daily inspiration message below!</div>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message.body}
-                timestamp={
-                  message.sent_at
-                    ? new Date(message.sent_at).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                        hour12: true,
-                      })
-                    : ""
-                }
-                deliveryInfo={{
-                  count: message.delivered_count || 0,
-                  status: message.status || "pending",
-                }}
-                activeCount={message.current_active_subscribers || 0} // Pass activeCount
-                deliveredCount={message.delivered_count || 0} // Pass deliveredCount
-                actions={
-                  message.status === "failed" && (
-                    <Button
-                      onClick={() => handleRetryMessage(message.id)}
-                      size="sm"
-                      variant="outline"
-                      className="ml-2"
-                    >
-                      Retry
-                    </Button>
-                  )
-                }
-              />
-            ))
-          )}
+    <div className="flex flex-col min-h-screen h-screen w-full bg-gradient-to-b from-muted/30 to-muted/10">
+      {/* Header (optional, add your own header here if needed) */}
+      {/* <div className="sticky top-0 z-10 bg-background shadow-sm py-2 px-4">Header</div> */}
+
+      {/* Message List (scrollable) */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 pb-32 max-w-4xl mx-auto w-full"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          data-testid="chat-container"
+        >
+          <div className="space-y-8">
+            {messages.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <div className="text-lg mb-2">No messages yet</div>
+                <div className="text-sm">Send your first daily inspiration message below!</div>
+              </div>
+            ) : (
+              <>
+                {messages.map((message) => (
+                  <MessageBubble
+                    key={message.id}
+                    message={message.body}
+                    timestamp={
+                      message.sent_at
+                        ? new Date(message.sent_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                            hour12: true,
+                          })
+                        : ""
+                    }
+                    deliveryInfo={{
+                      count: message.delivered_count || 0,
+                      status: message.status || "pending",
+                    }}
+                    activeCount={message.current_active_subscribers || 0}
+                    deliveredCount={message.delivered_count || 0}
+                    actions={
+                      message.status === "failed" && (
+                        <Button
+                          onClick={() => handleRetryMessage(message.id)}
+                          size="sm"
+                          variant="outline"
+                          className="ml-2"
+                        >
+                          Retry
+                        </Button>
+                      )
+                    }
+                  />
+                ))}
+                {/* Extra space after last message bubble */}
+                <div className="space-y-4" />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="border-t border-border bg-background p-3">
+      {/* Send Bar (fixed at bottom) */}
+      <div className="sticky bottom-0 left-0 w-full border-t border-border bg-background p-3 z-20">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end space-x-3">
             <div className="flex-1">
@@ -220,11 +216,13 @@ export default function Messages() {
         </div>
       </div>
 
+      {/* Subscribers Modal */}
       <SubscribersModal
         open={subscribersModalOpen}
         onOpenChange={setSubscribersModalOpen}
       />
 
+      {/* Floating Manage Subscribers Button */}
       <Button
         onClick={() => setSubscribersModalOpen(true)}
         className="fixed bottom-6 right-6 rounded-full w-14 h-14 shadow-lg hover:shadow-xl z-40"
