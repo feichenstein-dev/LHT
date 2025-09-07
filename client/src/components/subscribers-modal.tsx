@@ -38,22 +38,33 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/subscribers");
       const data = await response.json();
-      return data.sort((a: Subscriber, b: Subscriber) => (a.name || "").localeCompare(b.name || ""));
+      // Always sort by name A-Z, fallback to phone if no name
+      return data.sort((a: Subscriber, b: Subscriber) => {
+        const nameA = (a.name || a.phone_number || '').toLowerCase();
+        const nameB = (b.name || b.phone_number || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
     },
     enabled: open,
   });
   // Filter subscribers by search term (name or phone number)
-  const filteredSubscribers = subscribers.filter((subscriber) => {
-    if (!searchTerm.trim()) return true;
-    const searchLower = searchTerm.toLowerCase();
-    const name = (subscriber.name || '').toLowerCase();
-    const nameMatch = name.includes(searchLower);
-    // Only use digit filtering for phone number search
-    const phone = (subscriber.phone_number || '').replace(/\D/g, '');
-    const searchDigits = searchTerm.replace(/\D/g, '');
-    const phoneMatch = searchDigits.length > 0 && phone.includes(searchDigits);
-    return nameMatch || phoneMatch;
-  });
+  const filteredSubscribers = subscribers
+    .filter((subscriber) => {
+      if (!searchTerm.trim()) return true;
+      const searchLower = searchTerm.toLowerCase();
+      const name = (subscriber.name || '').toLowerCase();
+      const nameMatch = name.includes(searchLower);
+      // Only use digit filtering for phone number search
+      const phone = (subscriber.phone_number || '').replace(/\D/g, '');
+      const searchDigits = searchTerm.replace(/\D/g, '');
+      const phoneMatch = searchDigits.length > 0 && phone.includes(searchDigits);
+      return nameMatch || phoneMatch;
+    })
+    .sort((a, b) => {
+      const nameA = (a.name || a.phone_number || '').toLowerCase();
+      const nameB = (b.name || b.phone_number || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
 
   // ...removed error toast...
 
@@ -234,12 +245,12 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       <DialogContent
         className="max-w-2xl w-full p-0"
         style={{
-          padding: 30,
+          padding: 32,
           position: 'fixed',
-          top: '10vh',
+          top: '4vh',
           left: '50%',
           transform: 'translateX(-50%)',
-          maxHeight: '80vh',
+          maxHeight: '92vh',
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
@@ -317,7 +328,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
 
 
           {/* Subscribers List */}
-          <div className="overflow-y-auto max-h-96 space-y-2">
+          <div className="overflow-y-auto bg-white rounded-lg space-y-2" style={{ maxHeight: '70vh', paddingBottom: 48 }}>
             {isLoading ? (
               <div className="text-center py-4 text-muted-foreground">
                 Loading subscribers...
@@ -331,7 +342,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 {filteredSubscribers.map((subscriber) => (
                   <div 
                     key={subscriber.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50"
+                    className="flex items-center justify-between p-2 border border-border rounded-lg hover:bg-muted/50"
                     data-testid={`subscriber-${subscriber.id}`}
                   >
                     <div className="flex-1">
@@ -384,6 +395,8 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                     </div>
                   </div>
                 ))}
+                {/* Spacer to ensure last subscriber is always visible */}
+                <div style={{ minHeight: 40, pointerEvents: 'none' }} />
               </>
             )}
           </div>

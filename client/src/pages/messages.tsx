@@ -110,29 +110,9 @@ export default function Messages() {
       className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
       style={{ height: '100svh', minHeight: '100svh', maxHeight: '100svh', overflow: 'hidden', position: 'fixed', inset: 0 }}
     >
-      {/* Sticky Header with Refresh Button */}
-      <div className="fixed top-0 left-0 w-full z-50 bg-gradient-to-b from-muted/30 to-muted/10 backdrop-blur-md border-b border-border" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.03)' }}>
-        <div className="max-w-4xl mx-auto w-full px-4 py-4 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-3 py-1 text-xs font-semibold shadow"
-            style={{ marginLeft: 'auto' }}
-          >
-            Refresh
-          </button>
-        </div>
-        {/* Sticky Tabs/Navigation Bar (if you have tabs, add here) */}
-        {/* Example: */}
-        {/*
-        <div className="flex gap-4 px-4 pb-2">
-          <button className="font-medium text-base text-foreground border-b-2 border-primary">Messages</button>
-          <button className="font-medium text-base text-muted-foreground">Delivery Logs</button>
-        </div>
-        */}
-      </div>
+  {/* ...header removed, handled by App navigation... */}
       {/* Message List (scrollable) */}
-      <div className="flex-1 flex flex-col min-h-0" style={{ paddingTop: 72 }}>
+  <div className="flex-1 flex flex-col min-h-0">
         <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 max-w-4xl mx-auto w-full"
