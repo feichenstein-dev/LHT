@@ -101,7 +101,7 @@ export default function Messages() {
   return (
     <div
       className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
-      style={{ minHeight: '80svh', maxHeight: '80svh', height: '80svh' }}
+      style={{ height: '75svh', minHeight: '75svh', maxHeight: '75svh', overflow: 'hidden' }}
     >
       {/* Message List (scrollable) */}
       <div className="flex-1 flex flex-col min-h-0">
