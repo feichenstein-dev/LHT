@@ -108,7 +108,15 @@ export default function Messages() {
   return (
     <div
       className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
-      style={{ height: '100svh', minHeight: '100svh', maxHeight: '100svh', overflow: 'hidden', position: 'fixed', inset: 0 }}
+      style={{
+        height: '100svh',
+        minHeight: '100svh',
+        maxHeight: '100svh',
+        overflow: 'hidden',
+        position: 'fixed',
+        inset: 0,
+        overscrollBehavior: 'none',
+      }}
     >
   {/* ...header removed, handled by App navigation... */}
       {/* Message List (scrollable) */}
@@ -116,7 +124,13 @@ export default function Messages() {
         <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 max-w-4xl mx-auto w-full"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: 0, paddingBottom: '92px' }}
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            minHeight: 0,
+            paddingBottom: '92px',
+            overscrollBehavior: 'none',
+          }}
           data-testid="chat-container"
         >
           <div className="space-y-4">
