@@ -319,7 +319,7 @@ export default function Logs() {
                   calendarClassName="rounded-2xl shadow-lg border border-gray-200"
                   wrapperClassName="w-full"
                   dateFormat="yyyy-MM-dd"
-                  popperPlacement="bottom-start"
+                  popperPlacement="bottom"
                   showPopperArrow={false}
                 />
               </div>
