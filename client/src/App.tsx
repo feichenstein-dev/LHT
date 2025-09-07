@@ -19,6 +19,7 @@ function Navigation() {
     <header className="bg-card border-b border-border sticky top-0 z-10">
       <div className="px-4 py-3">
         <h1 className="text-xl font-semibold text-center text-foreground" data-testid="app-title">
+          <br />
           Sefer Chofetz Chaim Texts
         </h1>
       </div>

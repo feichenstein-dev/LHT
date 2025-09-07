@@ -296,7 +296,7 @@ export default function Logs() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '30%' }}>Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '25%' }}>Message</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Name</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Phone Number</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
