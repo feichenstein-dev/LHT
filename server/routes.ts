@@ -267,7 +267,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/subscribers", async (req, res) => {
     try {
       const subscriberData = insertSubscriberSchema.parse(req.body);
-      
       // Check if subscriber already exists
       const existing = await storage.getSubscriberByPhone(subscriberData.phone_number);
       if (existing) {
@@ -275,6 +274,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const subscriber = await storage.createSubscriber(subscriberData);
+
+      // Send welcome text if possible
+      const apiKey = process.env.TELNYX_API_KEY;
+      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
+      if (subscriber && apiKey && telnyxNumber) {
+        const messageText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
+        await sendMessageAndLog({
+          to: subscriber.phone_number,
+          text: messageText,
+          name: subscriber.name ?? null,
+          direction: 'outbound',
+          storage,
+        });
+      }
+
       res.json(subscriber);
     } catch (error) {
       console.error("Error creating subscriber:", error);

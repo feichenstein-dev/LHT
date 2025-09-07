@@ -233,15 +233,15 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     >
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
         <DialogHeader>
-          <div className="flex flex-row items-center justify-between w-full">
-            <div>
+          <div className="flex flex-row items-center w-full gap-2">
+            <div className="flex-1 min-w-0 pt-10">
               <DialogTitle>Manage Subscribers</DialogTitle>
               <div className="text-sm text-muted-foreground">
                 Active: {activeSubscribers} | Inactive: {inactiveSubscribers}
               </div>
             </div>
-            {/* Search Bar Top Right */}
-            <div className="relative flex items-center w-72 ml-auto">
+            {/* Search Bar Top Right, with max-w-xs to avoid overlap */}
+            <div className="relative flex items-center max-w-xs w-full pt-10">
               <Input
                 type="text"
                 placeholder="Search by name or phone number"
