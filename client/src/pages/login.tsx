@@ -42,6 +42,7 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
+            autoComplete="username"
           />
         </div>
         <div className="mb-4">
@@ -52,6 +53,7 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
         </div>
         {error && <div className="mb-4 text-red-500 text-sm">{error}</div>}
