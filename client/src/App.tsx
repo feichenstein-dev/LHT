@@ -79,7 +79,10 @@ function Navigation() {
 
 function Router() {
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div
+      className="h-screen bg-background flex flex-col overflow-hidden"
+      style={{ overscrollBehavior: 'none', touchAction: 'none' }}
+    >
       <Navigation />
       <main className="flex-1 flex flex-col min-h-0">
         <Switch>
