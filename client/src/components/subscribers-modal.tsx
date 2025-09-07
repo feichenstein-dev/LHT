@@ -403,7 +403,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         </div>
       </DialogContent>
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
+        <DialogContent style={{ top: '10vh', left: '50%', transform: 'translateX(-50%)', position: 'fixed', maxWidth: 400, width: '90vw' }}>
           <DialogHeader>
             <DialogTitle>Edit Subscriber</DialogTitle>
           </DialogHeader>
