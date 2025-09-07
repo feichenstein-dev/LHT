@@ -160,6 +160,20 @@ export default function Logs() {
     });
   }
 
+  const retryMessage = async (messageId: string) => {
+    setRetryingId(messageId);
+    try {
+      const response = await fetch(`/api/retry-message/${messageId}`, { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to retry message');
+      toast({ title: 'Retry Successful', description: 'The message has been retried successfully.' });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      toast({ title: 'Retry Failed', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2">
       <Card className="w-full max-w-screen-xl mx-auto">
@@ -178,7 +192,7 @@ export default function Logs() {
                   persist('logs_selected', 'all');
                 }}
               >
-                <SelectTrigger className="min-w-[220px] w-auto h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="min-w-[300px] w-auto h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
                 <SelectContent className="min-w-[220px] w-auto">
@@ -190,7 +204,7 @@ export default function Logs() {
             </div>
       <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4 min-w-[300px]">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
         <SelectContent className="w-full">
@@ -264,7 +278,7 @@ export default function Logs() {
                                         <TableHead className="text-base font-semibold text-left text-foreground">Phone Number</TableHead>
                                         <TableHead className="text-base font-semibold text-left text-foreground">Sent At</TableHead>
                                         <TableHead className="text-base font-semibold text-left text-foreground">Status</TableHead>
-
+                                        <TableHead className="text-base font-semibold text-left text-foreground">Action</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -276,7 +290,16 @@ export default function Logs() {
                                             <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
                                             <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
                                             <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
-                                            {/* Action column removed */}
+                                            <TableCell className="text-left font-normal">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => retryMessage(log.id)}
+                                                //disabled={log.status !== 'failed' && log.status !== 'invalid' || retryingId === log.id}
+                                              >
+                                                {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                                              </Button>
+                                            </TableCell>
                                           </TableRow>
                                         );
                                       })}
@@ -301,6 +324,7 @@ export default function Logs() {
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Phone Number</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -313,8 +337,18 @@ export default function Logs() {
                         <TableCell className="font-normal">{sub?.name || log.name || ""}</TableCell>
                         <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ""}</TableCell>
                         <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
-                        <TableCell className="text-left font-normal flex items-center gap-2">
+                        <TableCell className="text-left font-normal">
                           <span>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</span>
+                        </TableCell>
+                        <TableCell className="text-left font-normal">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => retryMessage(log.id)}
+                            //disabled={log.status !== 'failed' && log.status !== 'invalid' || retryingId === log.id}
+                          >
+                            {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

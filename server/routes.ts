@@ -25,15 +25,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!apiKey || !telnyxNumber) {
         return res.status(500).json({ message: "Missing Telnyx configuration" });
       }
-      const telnyxClient = new Telnyx(apiKey);
-      await telnyxClient.messages.create({
-        from: telnyxNumber,
-        to: phone_number,
-        text: message.body,
-        webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
-      } as any);
-  // Do not log delivery here; will be logged by webhook handler
-      res.json({ success: true });
+
+      // Pre-send phone number validation
+      const phoneRegex = /^\+[1-9]\d{9,14}$/;
+      if (!phoneRegex.test(phone_number)) {
+        await storage.createDeliveryLog({
+          message_id,
+          phone_number,
+          name: null, // Name can be added if available
+          message_text: message.body,
+          status: "invalid",
+          error_message: "Invalid phone number format",
+          direction: "outbound",
+          telnyx_message_id: null,
+        });
+        return res.status(400).json({ message: "Invalid phone number format" });
+      }
+
+      try {
+        const telnyxResponse = await new Telnyx(apiKey).messages.create({
+          from: telnyxNumber,
+          to: phone_number,
+          text: message.body,
+          webhook_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`,
+        } as any);
+
+        if (telnyxResponse.data && telnyxResponse.data.errors && telnyxResponse.data.errors.length > 0) {
+          const errorMessage = telnyxResponse.data.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+          await storage.createDeliveryLog({
+            message_id,
+            phone_number,
+            name: null, // Name can be added if available
+            message_text: message.body,
+            status: "failed",
+            error_message: errorMessage,
+            direction: "outbound",
+            telnyx_message_id: null,
+          });
+          return res.status(500).json({ message: "Telnyx API error", error: errorMessage });
+        }
+
+        if (telnyxResponse.data && telnyxResponse.data.id) {
+          // Log as sent; final status will be updated via webhook
+          await storage.createDeliveryLog({
+            message_id,
+            phone_number,
+            name: null, // Name can be added if available
+            message_text: message.body,
+            status: "sent",
+            error_message: null,
+            direction: "outbound",
+            telnyx_message_id: telnyxResponse.data.id,
+          });
+
+          res.json({ success: true });
+        } else {
+          const errorMessage = "Telnyx response data is missing or invalid.";
+          await storage.createDeliveryLog({
+            message_id,
+            phone_number,
+            name: null, // Name can be added if available
+            message_text: message.body,
+            status: "failed",
+            error_message: errorMessage,
+            direction: "outbound",
+            telnyx_message_id: null,
+          });
+          res.status(500).json({ message: errorMessage });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        await storage.createDeliveryLog({
+          message_id,
+          phone_number,
+          name: null, // Name can be added if available
+          message_text: message.body,
+          status: "failed",
+          error_message: errorMessage,
+          direction: "outbound",
+          telnyx_message_id: null,
+        });
+        res.status(500).json({ message: "Failed to retry message", error: errorMessage });
+      }
     } catch (error) {
       console.error("Error retrying message:", error);
       res.status(500).json({ message: "Failed to retry message" });
