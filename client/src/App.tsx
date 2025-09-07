@@ -72,11 +72,18 @@ function Router() {
 }
 
 function App() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => {
+    // Check localStorage for authentication state on initial load
+    return localStorage.getItem("authenticated") === "true";
+  });
 
-  // Check for authentication state (could use localStorage, cookie, etc. for persistence)
+  const handleLoginSuccess = () => {
+    setAuthenticated(true);
+    localStorage.setItem("authenticated", "true"); // Persist authentication state
+  };
+
   if (!authenticated) {
-    return <Login onSuccess={() => setAuthenticated(true)} />;
+    return <Login onSuccess={handleLoginSuccess} />;
   }
 
   return (
