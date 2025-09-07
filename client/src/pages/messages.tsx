@@ -190,7 +190,7 @@ export default function Messages() {
                   data-testid="subscribers-info"
                 >
                   <Users className="h-3 w-3" />
-                  <span>{activeSubscribers.length} subscribers</span>
+                  <span>{activeSubscribers.length} active subscribers</span>
                 </button>
                 <span className="text-xs text-muted-foreground" data-testid="character-count">
                   {messageText.length}/{/[\u0590-\u05FF]/.test(messageText) ? 670 : 1530} characters

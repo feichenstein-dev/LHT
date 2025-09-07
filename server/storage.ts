@@ -33,6 +33,7 @@ export interface IStorage {
   updateSubscriberStatus(id: string, status: string): Promise<Subscriber | undefined>;
   setSubscriberBlocked(phoneNumber: string): Promise<void>;
   unblockSubscriber(phoneNumber: string): Promise<void>;
+  updateSubscriberName(id: string, name: string): Promise<Subscriber | undefined>;
 
   // Delivery Logs
   getDeliveryLogs(filters?: {
@@ -67,6 +68,14 @@ class MemoryStorage implements IStorage {
     const subscriber = this.subscribers.find(s => s.id === id);
     if (subscriber) {
       subscriber.status = status;
+      return subscriber;
+    }
+    return undefined;
+  }
+  async updateSubscriberName(id: string, name: string): Promise<Subscriber | undefined> {
+    const subscriber = this.subscribers.find(s => s.id === id);
+    if (subscriber) {
+      subscriber.name = name;
       return subscriber;
     }
     return undefined;
@@ -253,7 +262,7 @@ export class FallbackStorage implements IStorage {
   async getSubscribers(): Promise<Subscriber[]> {
     // Fetch subscribers from Supabase
     const { data, error } = await supabase.from('subscribers').select('*');
-  console.log('SERVER LOG: Supabase getSubscribers response:', { data, error });
+    //console.log('SERVER LOG: Supabase getSubscribers response:', { data, error });
     if (error) {
       console.error('Supabase error:', error);
       return [];
@@ -440,6 +449,22 @@ export class FallbackStorage implements IStorage {
 
     if (error) {
       console.error('Supabase error (updateSubscriberStatus):', error);
+      return undefined;
+    }
+
+    return data;
+  }
+
+  async updateSubscriberName(id: string, name: string): Promise<Subscriber | undefined> {
+    const { data, error } = await supabase
+      .from('subscribers')
+      .update({ name })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Supabase error (updateSubscriberName):', error);
       return undefined;
     }
 

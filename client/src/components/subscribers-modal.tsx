@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 // ...removed useToast import...
 import { apiRequest } from "@/lib/queryClient";
 import { formatPhoneNumber, validatePhoneNumber } from "@/lib/supabase";
-import { Trash2, X } from "lucide-react";
+import { Trash2, X, Edit3, Search } from "lucide-react";
 import type { Subscriber } from "@shared/schema";
 
 interface SubscribersModalProps {
@@ -20,9 +20,15 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   // ...removed test log...
   const [phoneNumber, setPhoneNumber] = useState("");
   const [subscriberName, setSubscriberName] = useState("");
+  const [editingSubscriber, setEditingSubscriber] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   // ...removed toast usage...
-  const queryClient = useQueryClient();
+  // (keep only one set of these variables, defined below)
+  // ...removed toast usage...
 
+  const queryClient = useQueryClient();
   const {
     data: subscribers = [],
     isLoading,
@@ -31,9 +37,22 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     queryKey: ["/api/subscribers"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/subscribers");
-      return response.json();
+      const data = await response.json();
+      return data.sort((a: Subscriber, b: Subscriber) => (a.name || "").localeCompare(b.name || ""));
     },
     enabled: open,
+  });
+  // Filter subscribers by search term (name or phone number)
+  const filteredSubscribers = subscribers.filter((subscriber) => {
+    if (!searchTerm.trim()) return true;
+    const searchLower = searchTerm.toLowerCase();
+    const name = (subscriber.name || '').toLowerCase();
+    const nameMatch = name.includes(searchLower);
+    // Only use digit filtering for phone number search
+    const phone = (subscriber.phone_number || '').replace(/\D/g, '');
+    const searchDigits = searchTerm.replace(/\D/g, '');
+    const phoneMatch = searchDigits.length > 0 && phone.includes(searchDigits);
+    return nameMatch || phoneMatch;
   });
 
   // ...removed error toast...
@@ -121,6 +140,22 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
   });
 
+  const updateSubscriberNameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const response = await apiRequest("PATCH", `/api/subscribers/${id}/name`, { name });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      setEditingSubscriber(null);
+      setEditingName("");
+    },
+    onError: (error: any) => {
+      console.error("Failed to update subscriber name:", error);
+      window.alert("Failed to update subscriber name. Please try again.");
+    },
+  });
+
   const handleAddSubscriber = () => {
     if (!phoneNumber.trim()) return;
     if (!validatePhoneNumber(phoneNumber)) {
@@ -151,6 +186,28 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     }
   };
 
+  const handleEditSubscriber = (id: string, name: string) => {
+    setEditingSubscriber(id);
+    setEditingName(name);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingSubscriber(null);
+    setEditingName("");
+  };
+
+  const handleUpdateSubscriberName = () => {
+    if (editingSubscriber && editingName.trim()) {
+      updateSubscriberNameMutation.mutate({ id: editingSubscriber, name: editingName.trim() }, {
+        onSuccess: () => {
+          handleCloseEditModal();
+        },
+      });
+    }
+  };
+
   const formatJoinDate = (joinedAt: string) => {
     const date = new Date(joinedAt);
     return date.toLocaleDateString('en-US', {
@@ -159,6 +216,9 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       year: 'numeric',
     });
   };
+
+  const activeSubscribers = subscribers.filter((subscriber) => subscriber.status === "active").length;
+  const inactiveSubscribers = subscribers.filter((subscriber) => subscriber.status === "inactive").length;
 
   return (
     <Dialog
@@ -173,7 +233,29 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     >
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Manage Subscribers</DialogTitle>
+          <div className="flex flex-row items-center justify-between w-full">
+            <div>
+              <DialogTitle>Manage Subscribers</DialogTitle>
+              <div className="text-sm text-muted-foreground">
+                Active: {activeSubscribers} | Inactive: {inactiveSubscribers}
+              </div>
+            </div>
+            {/* Search Bar Top Right */}
+            <div className="relative flex items-center w-72 ml-auto">
+              <Input
+                type="text"
+                placeholder="Search by name or phone number"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-10 pr-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/40 bg-white"
+                data-testid="input-search-subscribers"
+                style={{ minWidth: 0, width: '100%' }}
+              />
+              <span className="absolute left-3 text-gray-400 pointer-events-none">
+                <Search className="w-5 h-5" />
+              </span>
+            </div>
+          </div>
         </DialogHeader>
         <div className="space-y-4">
           {/* Add Subscriber */}
@@ -193,7 +275,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
             />
             <Input
               type="text"
-              placeholder="Name (optional)"
+              placeholder="Name"
               value={subscriberName}
               onChange={(e) => setSubscriberName(e.target.value)}
               onKeyDown={(e) => {
@@ -213,19 +295,21 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
             </Button>
           </div>
 
+
+
           {/* Subscribers List */}
           <div className="overflow-y-auto max-h-96 space-y-2">
             {isLoading ? (
               <div className="text-center py-4 text-muted-foreground">
                 Loading subscribers...
               </div>
-            ) : subscribers.length === 0 ? (
+            ) : filteredSubscribers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No subscribers yet. Add your first subscriber above.
+                No subscribers found.
               </div>
             ) : (
               <>
-                {subscribers.map((subscriber) => (
+                {filteredSubscribers.map((subscriber) => (
                   <div 
                     key={subscriber.id}
                     className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50"
@@ -258,15 +342,25 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                           Reactivate
                         </Button>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveSubscriber(subscriber.id)}
-                          disabled={removeSubscriberMutation.isPending}
-                          data-testid={`button-remove-${subscriber.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
-                        </Button>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditSubscriber(subscriber.id, subscriber.name || "")}
+                            data-testid={`button-edit-${subscriber.id}`}
+                          >
+                            <Edit3 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveSubscriber(subscriber.id)}
+                            disabled={removeSubscriberMutation.isPending}
+                            data-testid={`button-remove-${subscriber.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-gray-400 hover:text-gray-700 transition-colors" />
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -276,6 +370,32 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
           </div>
         </div>
       </DialogContent>
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Subscriber</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="text"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              placeholder="Enter new name"
+            />
+            <div className="flex justify-end space-x-2">
+              <Button
+                onClick={handleUpdateSubscriberName}
+                disabled={updateSubscriberNameMutation.isPending}
+              >
+                {updateSubscriberNameMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+              <Button variant="ghost" onClick={handleCloseEditModal}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

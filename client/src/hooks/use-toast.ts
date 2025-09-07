@@ -144,7 +144,7 @@ function toast({ ...props }: Toast) {
 
   // Fallback debug: log and alert when toast is called
   console.log('Toast called:', props)
-  alert(`Toast: ${props.title || ''} - ${props.description || ''}`)
+  alert(`${props.title || ''} - ${props.description || ''}`)
 
   const update = (props: ToasterToast) =>
     dispatch({

@@ -174,6 +174,13 @@ export default function Logs() {
     }
   };
 
+  if (direction === 'inbound') {
+    filteredLogs = filteredLogs.map((log: any) => {
+      const { action, ...rest } = log;
+      return rest;
+    });
+  }
+
   return (
     <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2">
       <Card className="w-full max-w-screen-xl mx-auto">
@@ -221,8 +228,12 @@ export default function Logs() {
               <input
                 type="date"
                 className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
-                value={filterDate}
-                onChange={e => { setFilterDate(e.target.value); persist('logs_filterDate', e.target.value); }}
+                value={filterDate || ""}
+                onChange={e => {
+                  setFilterDate(e.target.value);
+                  persist('logs_filterDate', e.target.value);
+                }}
+                placeholder="All Dates"
               />
             </div>
           </div>
@@ -323,7 +334,9 @@ export default function Logs() {
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Phone Number</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '20%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Status</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Action</TableHead>
+                    {direction !== 'inbound' && (
+                      <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Action</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -339,16 +352,17 @@ export default function Logs() {
                         <TableCell className="text-left font-normal">
                           <span>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</span>
                         </TableCell>
-                        <TableCell className="text-left font-normal">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => retryMessage(log.id)}
-                            //disabled={log.status !== 'failed' && log.status !== 'invalid' || retryingId === log.id}
-                          >
-                            {retryingId === log.id ? 'Retrying...' : 'Retry'}
-                          </Button>
-                        </TableCell>
+                        {direction !== 'inbound' && (
+                          <TableCell className="text-left font-normal">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => retryMessage(log.id)}
+                            >
+                              {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
