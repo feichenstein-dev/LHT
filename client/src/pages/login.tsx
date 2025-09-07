@@ -1,10 +1,23 @@
-import { useState } from "react";
 
 export default function Login({ onSuccess }: { onSuccess?: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // On mount, check for saved credentials
+  useEffect(() => {
+    const saved = localStorage.getItem("lht-remember-login");
+    if (saved) {
+      try {
+        const creds = JSON.parse(saved);
+        if (creds.email) setEmail(creds.email);
+        if (creds.password) setPassword(creds.password);
+        setRememberMe(true);
+      } catch {}
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +35,14 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
         setLoading(false);
         return;
       }
+      if (rememberMe) {
+        localStorage.setItem(
+          "lht-remember-login",
+          JSON.stringify({ email, password })
+        );
+      } else {
+        localStorage.removeItem("lht-remember-login");
+      }
       if (onSuccess) onSuccess();
     } catch (err) {
       setError("Network error");
@@ -32,7 +53,7 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
-  <form onSubmit={handleSubmit} action="/login" autoComplete="on" className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
+      <form onSubmit={handleSubmit} action="/login" autoComplete="on" className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
         {/* <button
           type="button"
           onClick={() => window.location.reload()}
@@ -67,6 +88,16 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
             autoComplete="current-password"
           />
         </div>
+        <div className="mb-4 flex items-center">
+          <input
+            id="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={e => setRememberMe(e.target.checked)}
+            className="mr-2"
+          />
+          <label htmlFor="rememberMe" className="text-sm">Remember Me</label>
+        </div>
         {error && <div className="mb-4 text-red-500 text-sm">{error}</div>}
         <button
           type="submit"
@@ -79,3 +110,4 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
     </div>
   );
 }
+import React, { useState, useEffect } from "react";
