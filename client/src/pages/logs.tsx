@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { useQuery } from "@tanstack/react-query";
+import ReactDOM from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -321,6 +322,7 @@ export default function Logs() {
                   dateFormat="yyyy-MM-dd"
                   popperPlacement="bottom"
                   showPopperArrow={false}
+                  popperContainer={({ children }) => ReactDOM.createPortal(children, document.body)}
                 />
               </div>
             </div>
