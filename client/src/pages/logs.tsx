@@ -217,7 +217,7 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '25%' }}>
+            <div style={{ flexBasis: '25%', paddingRight: '1rem' }}>
               <input
                 type="date"
                 className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
@@ -245,7 +245,7 @@ export default function Logs() {
                 <TableBody>
                   {groupedLHT.map((msg: any) => (
                     <>
-                      <TableRow key={msg.message_id}>
+                      <TableRow key={msg.message_id} style={{ width: '100%' }}>
                         <TableCell className="truncate text-base" style={{ maxWidth: 500 }} title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
                         <TableCell className="text-sm" style={{ color: 'black' }}>{formatDate(msg.sent_at)}</TableCell>
                         {statusOptions.map((status, idx) => (
