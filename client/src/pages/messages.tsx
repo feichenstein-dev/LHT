@@ -14,6 +14,7 @@ type ExtendedMessage = Message & {
   status: "delivered" | "failed" | "pending" | "unknown";
 };
 
+
 export default function Messages() {
   const [messageText, setMessageText] = useState("");
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
@@ -98,16 +99,16 @@ export default function Messages() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen h-screen w-full bg-gradient-to-b from-muted/30 to-muted/10">
-      {/* Header (optional, add your own header here if needed) */}
-      {/* <div className="sticky top-0 z-10 bg-background shadow-sm py-2 px-4">Header</div> */}
-
+    <div
+      className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
+      style={{ minHeight: '100svh' }}
+    >
       {/* Message List (scrollable) */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         <div
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 pb-32 max-w-4xl mx-auto w-full"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 max-w-4xl mx-auto w-full"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: 0 }}
           data-testid="chat-container"
         >
           <div className="space-y-8">
@@ -162,8 +163,11 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* Send Bar (fixed at bottom) */}
-      <div className="sticky bottom-0 left-0 w-full border-t border-border bg-background p-3 z-20">
+      {/* Send Bar (always visible at bottom) */}
+      <div
+        className="w-full border-t border-border bg-background p-3 z-20"
+        style={{ position: 'sticky', bottom: 0, left: 0 }}
+      >
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end space-x-3">
             <div className="flex-1">
