@@ -30,6 +30,13 @@ export default function TestSubscribers() {
 
   return (
     <div style={{ padding: 32 }}>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        style={{ position: 'fixed', top: 16, right: 16, background: '#e5e7eb', color: '#374151', borderRadius: 9999, padding: '4px 12px', fontWeight: 600, fontSize: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.07)', zIndex: 1000 }}
+      >
+        Refresh
+      </button>
       <h1>Test: Subscribers API</h1>
       {loading && <p>Loading...</p>}
       {error && <p style={{ color: "red" }}>Error: {error}</p>}

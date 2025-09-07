@@ -16,12 +16,19 @@ function Navigation() {
   // Use location for active tab highlight
   const [location] = useLocation();
   return (
-    <header className="bg-card border-b border-border sticky top-0 z-10">
-      <div className="px-4 py-3">
-        <h1 className="text-xl font-semibold text-center text-foreground" data-testid="app-title">
-          <br />
+    <header className="bg-card border-b border-border sticky top-0 z-20">
+      <div className="flex items-center justify-between px-4 py-3">
+        <h1 className="text-xl font-semibold text-center text-foreground flex-1" data-testid="app-title">
           Sefer Chofetz Chaim Texts
         </h1>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="ml-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-3 py-1 text-xs font-semibold shadow"
+          style={{ minWidth: 70 }}
+        >
+          Refresh
+        </button>
       </div>
       <nav className="flex">
         <Link

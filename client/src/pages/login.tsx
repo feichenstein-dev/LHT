@@ -33,6 +33,14 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="absolute top-4 right-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-3 py-1 text-xs font-semibold shadow"
+          style={{ zIndex: 10 }}
+        >
+          Refresh
+        </button>
         <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
         <div className="mb-4">
           <label className="block mb-1 font-medium">Email</label>
