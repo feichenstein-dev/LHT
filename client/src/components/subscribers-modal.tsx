@@ -231,7 +231,23 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         }
       }}
     >
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
+      <DialogContent
+        className="max-w-2xl w-full p-0"
+        style={{
+          padding: 30,
+          position: 'fixed',
+          top: '10vh',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          maxHeight: '80vh',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          touchAction: 'manipulation',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
         <DialogHeader>
           <div className="flex flex-row items-center w-full gap-2">
             <div className="flex-1 min-w-0 pt-10">
@@ -250,6 +266,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 className="pl-10 pr-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/40 bg-white"
                 data-testid="input-search-subscribers"
                 style={{ minWidth: 0, width: '100%' }}
+                tabIndex={-1}
               />
               <span className="absolute left-3 text-gray-400 pointer-events-none">
                 <Search className="w-5 h-5" />
@@ -261,31 +278,33 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
           {/* Add Subscriber */}
           <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
           <Input
-              type="text"
-              placeholder="Name"
-              value={subscriberName}
-              onChange={(e) => setSubscriberName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddSubscriber();
-                }
-              }}
-              data-testid="input-subscriber-name"
-              className="flex-1 min-w-0"
-            />            
-            <Input
-              type="tel"
-              placeholder="Phone Number"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddSubscriber();
-                }
-              }}
-              data-testid="input-phone-number"
-              className="flex-1 min-w-0"
-            />
+            type="text"
+            placeholder="Name"
+            value={subscriberName}
+            onChange={(e) => setSubscriberName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleAddSubscriber();
+              }
+            }}
+            data-testid="input-subscriber-name"
+            className="flex-1 min-w-0"
+            tabIndex={-1}
+          />
+          <Input
+            type="tel"
+            placeholder="Phone Number"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleAddSubscriber();
+              }
+            }}
+            data-testid="input-phone-number"
+            className="flex-1 min-w-0"
+            tabIndex={-1}
+          />
             <Button 
               onClick={handleAddSubscriber}
               disabled={addSubscriberMutation.isPending}
