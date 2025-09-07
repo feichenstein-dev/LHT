@@ -15,6 +15,10 @@ import Login from "@/pages/login";
 function Navigation() {
   // Use location for active tab highlight
   const [location] = useLocation();
+  const handleLogout = () => {
+    localStorage.removeItem("authenticated");
+    window.location.reload();
+  };
   return (
     <header className="bg-card border-b border-border sticky top-0 z-20">
       <div className="flex items-center justify-between px-4 py-3">
@@ -22,14 +26,24 @@ function Navigation() {
           <br />
           Sefer Chofetz Chaim Texts
         </h1>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="ml-4 mr-4 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-4 py-1 text-xs font-semibold shadow"
-          style={{ minWidth: 70 }}
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-4 py-1 text-xs font-semibold shadow"
+            style={{ minWidth: 70 }}
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="bg-red-100 hover:bg-red-200 text-red-700 rounded-full px-4 py-1 text-xs font-semibold shadow"
+            style={{ minWidth: 70 }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
       <nav className="flex">
         <Link

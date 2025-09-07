@@ -116,6 +116,7 @@ export default function Messages() {
         position: 'fixed',
         inset: 0,
         overscrollBehavior: 'none',
+        touchAction: 'none',
       }}
     >
   {/* ...header removed, handled by App navigation... */}
