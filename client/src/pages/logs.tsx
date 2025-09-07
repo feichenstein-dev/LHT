@@ -325,6 +325,7 @@ export default function Logs() {
                   popperPlacement="bottom"
                   showPopperArrow={false}
                   popperContainer={({ children }) => ReactDOM.createPortal(children, document.body)}
+                  readOnly
                 />
               </div>
             </div>
