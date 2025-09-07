@@ -141,19 +141,24 @@ export default function Messages() {
     >
   {/* ...header removed, handled by App navigation... */}
       {/* Message List (scrollable) */}
+
+  {/* Make the whole chat area (including white space) scrollable */}
   <div className="flex-1 flex flex-col min-h-0">
-        <div
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 max-w-4xl mx-auto w-full"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            minHeight: 0,
-            paddingBottom: '92px',
-            overscrollBehavior: 'none',
-          }}
-          data-testid="chat-container"
-        >
+    <div
+      ref={chatContainerRef}
+      className="flex-1 overflow-y-auto scrollbar-none w-full"
+      style={{
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        minHeight: 0,
+        paddingBottom: '92px',
+        overscrollBehavior: 'none',
+        WebkitOverflowScrolling: 'touch',
+      }}
+      data-testid="chat-container"
+    >
+      <div className="flex flex-col items-center w-full min-h-full px-4 pt-4" style={{ minHeight: '100%' }}>
+        <div className="w-full max-w-4xl">
           <div className="space-y-4">
             {messages.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
@@ -205,6 +210,8 @@ export default function Messages() {
           </div>
         </div>
       </div>
+    </div>
+  </div>
 
       {/* Send Bar (always visible at bottom) */}
       <div
