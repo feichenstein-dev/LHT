@@ -217,7 +217,7 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '10%' }}>
+            <div style={{ flexBasis: '25%' }}>
               <input
                 type="date"
                 className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
