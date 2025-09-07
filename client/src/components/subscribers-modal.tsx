@@ -260,20 +260,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         <div className="space-y-4">
           {/* Add Subscriber */}
           <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
-            <Input
-              type="tel"
-              placeholder="+1 (555) 123-4567"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddSubscriber();
-                }
-              }}
-              data-testid="input-phone-number"
-              className="flex-1 min-w-0"
-            />
-            <Input
+          <Input
               type="text"
               placeholder="Name"
               value={subscriberName}
@@ -284,6 +271,19 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 }
               }}
               data-testid="input-subscriber-name"
+              className="flex-1 min-w-0"
+            />            
+            <Input
+              type="tel"
+              placeholder="Phone Number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddSubscriber();
+                }
+              }}
+              data-testid="input-phone-number"
               className="flex-1 min-w-0"
             />
             <Button 
