@@ -15,6 +15,13 @@ type ExtendedMessage = Message & {
 };
 
 
+// Prevent iPad/mobile page scroll by setting html/body height and overflow
+if (typeof window !== "undefined") {
+  document.documentElement.style.height = "100svh";
+  document.body.style.height = "100svh";
+  document.body.style.overflow = "hidden";
+}
+
 export default function Messages() {
   const [messageText, setMessageText] = useState("");
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
@@ -101,7 +108,7 @@ export default function Messages() {
   return (
     <div
       className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
-      style={{ height: '75svh', minHeight: '75svh', maxHeight: '75svh', overflow: 'hidden', position: 'fixed' }}
+      style={{ height: '100svh', minHeight: '100svh', maxHeight: '100svh', overflow: 'hidden', position: 'fixed', inset: 0 }}
     >
       {/* Message List (scrollable) */}
       <div className="flex-1 flex flex-col min-h-0">
