@@ -110,6 +110,20 @@ export default function Messages() {
       className="flex flex-col w-full min-h-0 bg-gradient-to-b from-muted/30 to-muted/10"
       style={{ height: '100svh', minHeight: '100svh', maxHeight: '100svh', overflow: 'hidden', position: 'fixed', inset: 0 }}
     >
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-40 bg-gradient-to-b from-muted/30 to-muted/10 backdrop-blur-md border-b border-border" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.03)' }}>
+        <div className="max-w-4xl mx-auto w-full px-4 py-4">
+          <h1 className="text-2xl font-semibold">Sefer Chofetz Chaim</h1>
+        </div>
+        {/* Sticky Tabs/Navigation Bar (if you have tabs, add here) */}
+        {/* Example: */}
+        {/*
+        <div className="flex gap-4 px-4 pb-2">
+          <button className="font-medium text-base text-foreground border-b-2 border-primary">Messages</button>
+          <button className="font-medium text-base text-muted-foreground">Delivery Logs</button>
+        </div>
+        */}
+      </div>
       {/* Message List (scrollable) */}
       <div className="flex-1 flex flex-col min-h-0">
         <div
@@ -118,7 +132,7 @@ export default function Messages() {
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: 0 }}
           data-testid="chat-container"
         >
-          <div className="space-y-8">
+          <div className="space-y-4">
             {messages.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <div className="text-lg mb-2">No messages yet</div>
@@ -185,7 +199,7 @@ export default function Messages() {
                   value={messageText}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
-                  className="w-full bg-transparent resize-none border-none outline-none shadow-none focus-visible:ring-0 text-base min-h-[20px]"
+                  className="w-full bg-transparent resize-none border-none outline-none shadow-none focus-visible:ring-0 focus:outline-none focus-visible:outline-none text-base min-h-[20px]"
                   rows={1}
                   data-testid="message-input"
                 />

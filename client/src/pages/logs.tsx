@@ -265,11 +265,17 @@ export default function Logs() {
   return (
     <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2">
       <Card className="w-full max-w-screen-xl mx-auto">
-        <CardHeader>
+        <CardHeader
+          className="sticky top-0 z-40 bg-gradient-to-b from-muted/30 to-muted/10 backdrop-blur-md border-b border-border"
+          style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.03)' }}
+        >
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-row gap-4 mb-6 w-full flex-wrap">
+          <div
+            className="flex flex-row gap-4 mb-6 w-full flex-wrap sticky top-[56px] z-30 bg-gradient-to-b from-muted/30 to-muted/10 backdrop-blur-md border-b border-border"
+            style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.01)' }}
+          >
             <div style={{ flexBasis: '20%' }}>
               <Select
                 value={direction}
