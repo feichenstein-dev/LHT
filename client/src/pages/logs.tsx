@@ -27,7 +27,8 @@ export default function Logs() {
     return localStorage.getItem('logs_selected') || 'all';
   });
   const [filterDate, setFilterDate] = useState<string>(() => {
-    return localStorage.getItem('logs_filterDate') || "";
+    const val = localStorage.getItem('logs_filterDate');
+    return val === null ? "" : val;
   });
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
   const { toast } = useToast ? useToast() : { toast: () => {} };
@@ -102,27 +103,54 @@ export default function Logs() {
     if (direction === 'lht') {
       if (!log.message_id) return false;
       if (selected !== 'all' && log.message_id !== selected) return false;
+      if (filterDate && messagesData) {
+        // Find the message for this log
+        const msg = messagesData.find((m: any) => m.id === log.message_id);
+        if (!msg) return false;
+        const msgDate = new Date(msg.sent_at);
+        const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
+        if (msgDateStr !== filterDate) return false;
+      }
     } else if (direction === 'inbound') {
       if (log.direction !== 'inbound') return false;
       if (selected !== 'all' && log.subscriber_id !== selected) return false;
+      if (filterDate) {
+        const logDate = new Date(log.updated_at);
+        const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
+        if (logDateStr !== filterDate) return false;
+      }
     } else if (direction === 'outbound') {
       if (log.direction !== 'outbound') return false;
       if (log.message_id) return false;
       if (selected !== 'all' && log.subscriber_id !== selected) return false;
-    }
-    if (filterDate) {
-      const logDate = new Date(log.updated_at);
-      const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
-      if (logDateStr !== filterDate) return false;
+      if (filterDate) {
+        const logDate = new Date(log.updated_at);
+        const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
+        if (logDateStr !== filterDate) return false;
+      }
     }
     return true;
   });
 
-  // For LHT, group logs by message_id
+  // For LHT, group logs by message_id and filter messages by date (not logs)
   let groupedLHT: any[] = [];
+  let statusOptions: string[] = [];
+  let statusCountsByMsg: Record<string, Record<string, number>> = {};
   if (direction === 'lht' && messagesData) {
-    groupedLHT = messagesData.map((msg: any) => {
-      const msgLogs = filteredLogs.filter((log: any) => log.message_id === msg.id && log.direction === 'outbound');
+    // Filter messages by date if needed
+    let filteredMessages = messagesData;
+    if (filterDate) {
+      filteredMessages = messagesData.filter((msg: any) => {
+        const msgDate = new Date(msg.sent_at);
+        const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
+        return msgDateStr === filterDate;
+      });
+    }
+    if (selected !== 'all') {
+      filteredMessages = filteredMessages.filter((msg: any) => msg.id === selected);
+    }
+    groupedLHT = filteredMessages.map((msg: any) => {
+      const msgLogs = logs.filter((log: any) => log.message_id === msg.id && log.direction === 'outbound');
       return {
         message_id: msg.id,
         message_text: msg.body,
@@ -131,19 +159,8 @@ export default function Logs() {
         current_active_subscribers: msg.current_active_subscribers || 0,
         logs: msgLogs,
       };
-    }).filter((msg: any) => selected === 'all' || msg.message_id === selected);
-  }
-
-  // For inbound/outbound, sort filteredLogs by date desc
-  if (direction === 'inbound' || direction === 'outbound') {
-    filteredLogs = filteredLogs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  }
-
-  // For LHT, get dynamic status columns and counts
-  let statusOptions: string[] = [];
-  let statusCountsByMsg: Record<string, Record<string, number>> = {};
-  if (direction === 'lht' && groupedLHT.length) {
-    // Collect all unique statuses from logs
+    });
+    // Collect all unique statuses from all logs for these messages
     const allStatuses = new Set<string>();
     groupedLHT.forEach((msg: any) => {
       msg.logs.forEach((log: any) => {
@@ -158,6 +175,11 @@ export default function Logs() {
         statusCountsByMsg[msg.message_id][status] = msg.logs.filter((log: any) => log.status === status).length;
       });
     });
+  }
+
+  // For inbound/outbound, sort filteredLogs by date desc
+  if (direction === 'inbound' || direction === 'outbound') {
+    filteredLogs = filteredLogs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   }
 
   const retryMessage = async (messageId: string) => {
@@ -188,7 +210,7 @@ export default function Logs() {
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-row gap-4 mb-6 w-full">
+          <div className="flex flex-row gap-4 mb-6 w-full flex-wrap">
             <div style={{ flexBasis: '20%' }}>
               <Select
                 value={direction}
@@ -224,7 +246,7 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '25%', paddingRight: '1rem' }}>
+            <div style={{ flexBasis: '25%', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <input
                 type="date"
                 className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
@@ -234,14 +256,15 @@ export default function Logs() {
                   persist('logs_filterDate', e.target.value);
                 }}
                 placeholder="All Dates"
+                style={{ minWidth: 0, flex: 1 }}
               />
             </div>
           </div>
-          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : direction === 'lht' ? (
-              <Table className="table-auto w-full" style={{ tableLayout: 'fixed' }}>
+              <Table className="w-full" style={{ tableLayout: 'auto' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
@@ -256,8 +279,8 @@ export default function Logs() {
                 <TableBody>
                   {groupedLHT.map((msg: any) => (
                     <>
-                      <TableRow key={msg.message_id} style={{ width: '100%' }}>
-                        <TableCell className="truncate text-base" style={{ maxWidth: 500 }} title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
+                      <TableRow key={msg.message_id} style={{ width: '100%', background: expandedMsgId === msg.message_id ? 'rgba(0,0,0,0.01)' : undefined }}>
+                        <TableCell className="truncate text-base" style={{ maxWidth: 300 }} title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
                         <TableCell className="text-sm" style={{ color: 'black' }}>{formatDate(msg.sent_at)}</TableCell>
                         {statusOptions.map((status, idx) => (
                           <TableCell key={idx} className="text-center font-semibold text-base text-foreground">{statusCountsByMsg[msg.message_id]?.[status] || 0}</TableCell>
@@ -271,15 +294,15 @@ export default function Logs() {
                         </TableCell>
                       </TableRow>
                       {expandedMsgId === msg.message_id && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="p-0 border-none">
-                            <div className="flex justify-center items-center py-4">
-                              <div className="w-full flex justify-center">
-                                <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '98%' }}>
+                        <TableRow style={{ width: '100%' }}>
+                          <TableCell colSpan={5 + statusOptions.length} className="p-0 border-none">
+                            <div className="flex justify-center items-center py-4" style={{ width: '100%' }}>
+                              <div className="w-full flex justify-center" style={{ width: '100%' }}>
+                                <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '100%' }}>
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
                                   <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
                                   <p className="text-sm mb-4">
-                                      <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[\u0590-\u05FF]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
+                                      <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[F]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
                                   </p>
                                   <p className="text-sm mb-4"><strong>Sent To:</strong> {`${msg.delivered_count || 0} delivered / ${msg.current_active_subscribers || 0} active subscribers`}</p>
                                   <Table className="w-full">
@@ -326,7 +349,7 @@ export default function Logs() {
                 </TableBody>
               </Table>
             ) : (
-              <Table>
+              <Table className="w-full" style={{ tableLayout: 'auto' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '25%' }}>Message</TableHead>
