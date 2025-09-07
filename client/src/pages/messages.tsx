@@ -129,7 +129,7 @@ export default function Messages() {
         <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto scrollbar-none px-4 pt-4 max-w-4xl mx-auto w-full"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: 0 }}
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', minHeight: 0, paddingBottom: '92px' }}
           data-testid="chat-container"
         >
           <div className="space-y-4">
@@ -186,8 +186,8 @@ export default function Messages() {
 
       {/* Send Bar (always visible at bottom) */}
       <div
-        className="w-full border-t border-border bg-background p-3 z-20"
-        style={{ position: 'sticky', bottom: 0, left: 0 }}
+        className="w-screen border-t border-border bg-background p-3 z-40"
+        style={{ position: 'fixed', bottom: 0, left: 0, width: '100vw' }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end space-x-3">
