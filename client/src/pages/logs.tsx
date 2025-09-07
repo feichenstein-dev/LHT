@@ -318,14 +318,21 @@ export default function Logs() {
                   }}
                   isClearable
                   placeholderText="All Dates"
-                  className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
                   calendarClassName="rounded-2xl shadow-lg border border-gray-200"
                   wrapperClassName="w-full"
                   dateFormat="yyyy-MM-dd"
                   popperPlacement="bottom"
                   showPopperArrow={false}
                   popperContainer={({ children }) => ReactDOM.createPortal(children, document.body)}
-                  readOnly
+                  customInput={
+                    <button
+                      type="button"
+                      className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300 text-left"
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {filterDate ? filterDate.toLocaleDateString() : 'All Dates'}
+                    </button>
+                  }
                 />
               </div>
             </div>
