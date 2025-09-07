@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +19,51 @@ function formatDate(dateStr: string) {
 }
 
 export default function Logs() {
+  // Inject custom styles for the datepicker clear button
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      .react-datepicker__close-icon {
+        right: 1.5rem !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 2rem !important;
+        height: 2rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: none !important;
+        padding: 0 !important;
+      }
+      .react-datepicker__close-icon::after {
+        color: #64748b !important; /* Tailwind slate-500 */
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        background: none !important;
+        border-radius: 50%;
+        box-shadow: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        line-height: 1.75rem;
+        text-align: center;
+        margin: 0 auto;
+        transition: background 0.15s, color 0.15s;
+      }
+      // .react-datepicker__close-icon:hover::after {
+      //   color: #334155 !important; /* Tailwind slate-700 */
+      //   background: #e2e8f0 !important; /* Tailwind slate-100 */
+      //   display: flex;
+      //   align-items: center;
+      //   justify-content: center;
+      //   box-shadow: 0 0 0 2px #cbd5e1;
+      // }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
   const getInitialDirection = () => {
     const val = localStorage.getItem('logs_direction');
     if (val === 'lht' || val === 'inbound' || val === 'outbound') return val;
@@ -26,9 +73,9 @@ export default function Logs() {
   const [selected, setSelected] = useState<string>(() => {
     return localStorage.getItem('logs_selected') || 'all';
   });
-  const [filterDate, setFilterDate] = useState<string>(() => {
+  const [filterDate, setFilterDate] = useState<Date | null>(() => {
     const val = localStorage.getItem('logs_filterDate');
-    return val === null ? "" : val;
+    return val ? new Date(val) : null;
   });
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
   const { toast } = useToast ? useToast() : { toast: () => {} };
@@ -108,16 +155,22 @@ export default function Logs() {
         const msg = messagesData.find((m: any) => m.id === log.message_id);
         if (!msg) return false;
         const msgDate = new Date(msg.sent_at);
-        const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
-        if (msgDateStr !== filterDate) return false;
+        if (
+          msgDate.getFullYear() !== filterDate.getFullYear() ||
+          msgDate.getMonth() !== filterDate.getMonth() ||
+          msgDate.getDate() !== filterDate.getDate()
+        ) return false;
       }
     } else if (direction === 'inbound') {
       if (log.direction !== 'inbound') return false;
       if (selected !== 'all' && log.subscriber_id !== selected) return false;
       if (filterDate) {
         const logDate = new Date(log.updated_at);
-        const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
-        if (logDateStr !== filterDate) return false;
+        if (
+          logDate.getFullYear() !== filterDate.getFullYear() ||
+          logDate.getMonth() !== filterDate.getMonth() ||
+          logDate.getDate() !== filterDate.getDate()
+        ) return false;
       }
     } else if (direction === 'outbound') {
       if (log.direction !== 'outbound') return false;
@@ -125,8 +178,11 @@ export default function Logs() {
       if (selected !== 'all' && log.subscriber_id !== selected) return false;
       if (filterDate) {
         const logDate = new Date(log.updated_at);
-        const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
-        if (logDateStr !== filterDate) return false;
+        if (
+          logDate.getFullYear() !== filterDate.getFullYear() ||
+          logDate.getMonth() !== filterDate.getMonth() ||
+          logDate.getDate() !== filterDate.getDate()
+        ) return false;
       }
     }
     return true;
@@ -142,8 +198,11 @@ export default function Logs() {
     if (filterDate) {
       filteredMessages = messagesData.filter((msg: any) => {
         const msgDate = new Date(msg.sent_at);
-        const msgDateStr = `${msgDate.getFullYear()}-${String(msgDate.getMonth() + 1).padStart(2, '0')}-${String(msgDate.getDate()).padStart(2, '0')}`;
-        return msgDateStr === filterDate;
+        return (
+          msgDate.getFullYear() === filterDate.getFullYear() &&
+          msgDate.getMonth() === filterDate.getMonth() &&
+          msgDate.getDate() === filterDate.getDate()
+        );
       });
     }
     if (selected !== 'all') {
@@ -247,17 +306,23 @@ export default function Logs() {
               </Select>
             </div>
             <div style={{ flexBasis: '25%', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <input
-                type="date"
-                className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
-                value={filterDate || ""}
-                onChange={e => {
-                  setFilterDate(e.target.value);
-                  persist('logs_filterDate', e.target.value);
-                }}
-                placeholder="All Dates"
-                style={{ minWidth: 0, flex: 1 }}
-              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <DatePicker
+                  selected={filterDate}
+                  onChange={date => {
+                    setFilterDate(date);
+                    persist('logs_filterDate', date ? date.toISOString().slice(0, 10) : "");
+                  }}
+                  isClearable
+                  placeholderText="All Dates"
+                  className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300"
+                  calendarClassName="rounded-2xl shadow-lg border border-gray-200"
+                  wrapperClassName="w-full"
+                  dateFormat="yyyy-MM-dd"
+                  popperPlacement="bottom"
+                  showPopperArrow={false}
+                />
+              </div>
             </div>
           </div>
           <div className="bg-background rounded-xl shadow-md w-full" style={{ maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
