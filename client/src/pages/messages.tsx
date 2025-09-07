@@ -113,7 +113,6 @@ export default function Messages() {
       {/* Sticky Header with Refresh Button */}
       <div className="fixed top-0 left-0 w-full z-50 bg-gradient-to-b from-muted/30 to-muted/10 backdrop-blur-md border-b border-border" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.03)' }}>
         <div className="max-w-4xl mx-auto w-full px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Sefer Chofetz Chaim</h1>
           <button
             type="button"
             onClick={() => window.location.reload()}

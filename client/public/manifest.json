@@ -1,11 +1,11 @@
 {
-  "name": "Sefer Chafetz Chaim Texts",
+  "name": "Sefer Chofetz Chaim Texts",
   "short_name": "LHT",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
-  "description": "Sefer Chafetz Chaim Texts",
+  "description": "Sefer Chofetz Chaim Texts",
   "icons": [
     {
       "src": "/icons/images.png",
