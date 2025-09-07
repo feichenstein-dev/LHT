@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Logs() {
+  const queryClient = useQueryClient();
   // Inject custom styles for the datepicker clear button and disable pull-to-refresh/overscroll
   useEffect(() => {
     const style = document.createElement('style');
@@ -67,6 +69,26 @@ export default function Logs() {
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
+
+  // Auto-refresh on tab focus/visibility and custom events
+  useEffect(() => {
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("lht-autorefresh", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("lht-autorefresh", refresh);
+    };
+  }, [queryClient]);
   const getInitialDirection = () => {
     const val = localStorage.getItem('logs_direction');
     if (val === 'lht' || val === 'inbound' || val === 'outbound') return val;

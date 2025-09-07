@@ -29,6 +29,26 @@ export default function Messages() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
+  // Auto-refresh on tab focus/visibility and custom events
+  useEffect(() => {
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("lht-autorefresh", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("lht-autorefresh", refresh);
+    };
+  }, [queryClient]);
+
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ExtendedMessage[]>({
     queryKey: ["/api/messages"],
     select: (msgs: ExtendedMessage[]) =>

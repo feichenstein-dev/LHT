@@ -8,6 +8,23 @@ type Subscriber = {
 };
 
 export default function TestSubscribers() {
+  // Auto-refresh on tab focus/visibility and custom events
+  useEffect(() => {
+    const refresh = () => {
+      window.location.reload();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("lht-autorefresh", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("lht-autorefresh", refresh);
+    };
+  }, []);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);

@@ -1,5 +1,24 @@
 
 export default function Login({ onSuccess }: { onSuccess?: () => void }) {
+  const queryClient = useQueryClient();
+  // Auto-refresh on tab focus/visibility and custom events
+  useEffect(() => {
+    if (!queryClient) return;
+    const refresh = () => {
+      queryClient.invalidateQueries && queryClient.invalidateQueries();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("lht-autorefresh", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("lht-autorefresh", refresh);
+    };
+  }, [queryClient]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -111,3 +130,4 @@ export default function Login({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";

@@ -1,7 +1,25 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import React, { useEffect } from "react";
 
 export default function NotFound() {
+  // Auto-refresh on tab focus/visibility and custom events
+  useEffect(() => {
+    const refresh = () => {
+      window.location.reload();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("lht-autorefresh", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("lht-autorefresh", refresh);
+    };
+  }, []);
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
       <button
