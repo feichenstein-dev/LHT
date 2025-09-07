@@ -320,9 +320,9 @@ export default function Logs() {
                   <TableRow>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '25%' }}>Message</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Name</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Phone Number</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Phone Number</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '20%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Status</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Action</TableHead>
                   </TableRow>
                 </TableHeader>
