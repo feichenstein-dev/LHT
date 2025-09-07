@@ -264,7 +264,7 @@ export default function Logs() {
                           <TableCell colSpan={6} className="p-0 border-none">
                             <div className="flex justify-center items-center py-4">
                               <div className="w-full flex justify-center">
-                                <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '98%', padding: '15px' }}>
+                                <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '98%' }}>
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
                                   <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
                                   <p className="text-sm mb-4">
@@ -295,7 +295,6 @@ export default function Logs() {
                                                 size="sm"
                                                 variant="outline"
                                                 onClick={() => retryMessage(log.id)}
-                                                //disabled={log.status !== 'failed' && log.status !== 'invalid' || retryingId === log.id}
                                               >
                                                 {retryingId === log.id ? 'Retrying...' : 'Retry'}
                                               </Button>
