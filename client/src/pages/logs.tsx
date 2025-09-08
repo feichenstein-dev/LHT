@@ -239,6 +239,13 @@ export default function Logs() {
   let groupedLHT: any[] = [];
   let statusOptions: string[] = [];
   let statusCountsByMsg: Record<string, Record<string, number>> = {};
+
+  // Helper to get carrier: prefer log.carrier, fallback to subscriber.carrier
+  const getCarrier = (log: any, sub: any) => {
+    if (log && log.carrier) return log.carrier;
+    if (sub && sub.carrier) return sub.carrier;
+    return '';
+  };
   if (direction === 'lht' && messagesData) {
     // Filter messages by date if needed
     let filteredMessages = messagesData;
@@ -502,7 +509,7 @@ export default function Logs() {
                                             <TableRow key={log.id} className="hover:bg-gray-200">
                                               <TableCell className="font-normal" style={{ width: '30%', cursor: 'pointer' }} onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')} title={sub?.name || log.name || 'N/A'}>{sub?.name || log.name || "N/A"}</TableCell>
                                               <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')} title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}>{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
-                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(log.carrier || sub?.carrier || '', 'Carrier')} title={log.carrier || sub?.carrier || ''}>{log.carrier || sub?.carrier || ''}</TableCell>
+                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')} title={getCarrier(log, sub)}>{getCarrier(log, sub)}</TableCell>
                                               <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')} title={formatDate(log.updated_at)}>{formatDate(log.updated_at)}</TableCell>
                                               <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')} title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
                                               <TableCell className="text-left font-normal" style={{ cursor: log.error_message ? 'pointer' : undefined }} onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')} title={log.error_message || ''}>
@@ -583,10 +590,10 @@ export default function Logs() {
                         <TableCell
                           className="font-normal log-cell-ellipsis"
                           style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                          title={log.carrier || sub?.carrier || ''}
-                          onClick={() => handleExpand(log.carrier || sub?.carrier || '', 'Carrier')}
+                          title={getCarrier(log, sub)}
+                          onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
                         >
-                          {log.carrier || sub?.carrier || ''}
+                          {getCarrier(log, sub)}
                         </TableCell>
                         <TableCell
                           className="text-left font-normal log-cell-ellipsis"
