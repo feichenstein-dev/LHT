@@ -505,70 +505,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
         }
 
-        if (data && data.event_type === "message.finalized") {
-            console.log('Processing message.finalized webhook...');
-            const {
-                id: telnyxMessageId,
-                to,
-                delivery_status,
-                text,
-                from
-            } = data.payload;
+    if (data && data.event_type === "message.finalized") {
+      console.log('Processing message.finalized webhook...');
+      const {
+        id: telnyxMessageId,
+        to,
+        text,
+        from
+      } = data.payload;
 
-            let status = "sent";
-            switch (delivery_status) {
-                case "delivered":
-                    status = "delivered";
-                    break;
-                case "failed":
-                case "undelivered":
-                    status = "failed";
-                    break;
-                default:
-                    status = "sent";
-            }
+      // Extract delivery status from the 'to' array if present
+      let status = "sent";
+      let phone_number = "";
+      let name = null;
 
-            let phone_number = "";
-            let name = null;
+      // If 'to' is an array, use the first element's status and phone_number
+      if (Array.isArray(to) && to.length > 0) {
+        status = to[0].status || "sent";
+        phone_number = to[0].phone_number || "";
+      } else if (typeof to === "string") {
+        phone_number = to;
+      } else if (to && typeof to.phone_number === "string") {
+        phone_number = to.phone_number;
+      }
 
-            if (typeof to === "string") {
-                phone_number = to;
-            } else if (to && typeof to.phone_number === "string") {
-                phone_number = to.phone_number;
-            }
+      if (from && typeof from.name === "string") {
+        name = from.name;
+      }
 
-            if (from && typeof from.name === "string") {
-                name = from.name;
-            }
+      // Fetch subscriber details if available
+      const subscriber = await storage.getSubscriberByPhone(phone_number);
+      if (subscriber) {
+        name = subscriber.name;
+      }
 
-            // Fetch subscriber details if available
-            const subscriber = await storage.getSubscriberByPhone(phone_number);
-            if (subscriber) {
-                name = subscriber.name;
-            }
+      // Extract error code and message if present
+      let errorMessage = null;
+      let errorCode = null;
+      if (data.payload.errors && Array.isArray(data.payload.errors) && data.payload.errors.length > 0) {
+        errorMessage = data.payload.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
+        errorCode = data.payload.errors.map((e: any) => e.code || '').filter(Boolean).join('; ');
+      } else if (data.payload.error_code) {
+        errorCode = data.payload.error_code;
+      }
+      let combinedError = null;
+      if (errorCode && errorMessage) {
+        combinedError = `Code: ${errorCode} | Message: ${errorMessage}`;
+      } else if (errorCode) {
+        combinedError = `Code: ${errorCode}`;
+      } else if (errorMessage) {
+        combinedError = errorMessage;
+      }
 
-            // Extract error code and message if present
-            let errorMessage = null;
-            let errorCode = null;
-            if (data.payload.errors && Array.isArray(data.payload.errors) && data.payload.errors.length > 0) {
-                errorMessage = data.payload.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
-                errorCode = data.payload.errors.map((e: any) => e.code || '').filter(Boolean).join('; ');
-            } else if (data.payload.error_code) {
-                errorCode = data.payload.error_code;
-            }
-            let combinedError = null;
-            if (errorCode && errorMessage) {
-                combinedError = `Code: ${errorCode} | Message: ${errorMessage}`;
-            } else if (errorCode) {
-                combinedError = `Code: ${errorCode}`;
-            } else if (errorMessage) {
-                combinedError = errorMessage;
-            }
-
-            // Log delivery status updates for messages sent from your Telnyx number
-            if (typeof from === 'string' && from === telnyxNumber) {
-                console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
-            }
+      // Log delivery status updates for messages sent from your Telnyx number
+      if (typeof from === 'string' && from === telnyxNumber) {
+        console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
+      }
 
       // Prefer to match by telnyx_message_id if present, else fallback to phone_number/message_text
       let updateResult;
@@ -626,7 +618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
       }
-        }
+    }
 
         if (data && data.event_type === "message.received") {
             const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
