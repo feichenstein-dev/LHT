@@ -67,6 +67,7 @@ async function sendMessageAndLog({
   }
 
   let telnyxResponse = null;
+  let carrier = null;
   try {
     telnyxResponse = await new Telnyx(apiKey).messages.create({
       from: telnyxNumber,
@@ -90,6 +91,12 @@ async function sendMessageAndLog({
       status = 'sent';
       error_message = null;
       telnyxMsgId = telnyxResponse.data.id;
+      // Set carrier for delivery log: outbound = to[0].carrier, inbound = from.carrier
+      if (direction === 'outbound' && Array.isArray(telnyxResponse.data.to) && telnyxResponse.data.to.length > 0) {
+        carrier = telnyxResponse.data.to[0].carrier || null;
+      } else if (direction === 'inbound' && telnyxResponse.data.from && telnyxResponse.data.from.carrier) {
+        carrier = telnyxResponse.data.from.carrier;
+      }
     } else {
       status = 'failed';
       error_message = 'Telnyx response data is missing or invalid.';
@@ -126,7 +133,8 @@ async function sendMessageAndLog({
     error_message,
     direction,
     telnyx_message_id: telnyxMsgId,
-    subscriber_id: subscriber_id ?? undefined
+    subscriber_id: subscriber_id ?? undefined,
+    carrier,
   });
   return { success: status === 'sent', status, error: error_message, telnyx_message_id: telnyxMsgId };
 }
@@ -265,7 +273,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscribers endpoints
   app.get("/api/subscribers", async (req, res) => {
     try {
-      const subscribers = await storage.getSubscribers();
+      let subscribers = await storage.getSubscribers();
+      // For each subscriber, update their carrier by making a carrier lookup call
+      const apiKey = process.env.TELNYX_API_KEY;
+      if (apiKey) {
+        const telnyx = require('telnyx')(apiKey);
+        await Promise.all(subscribers.map(async (sub) => {
+          try {
+            const lookup = await telnyx.numberLookup.lookup(sub.phone_number);
+            let normalizedCarrier = lookup.data.carrier && lookup.data.carrier.name ? lookup.data.carrier.name : '';
+            let legalCarrier = lookup.data.carrier && lookup.data.carrier.full_name ? lookup.data.carrier.full_name : '';
+            if (normalizedCarrier && normalizedCarrier.toLowerCase().includes('telnyx')) normalizedCarrier = '';
+            if (legalCarrier && legalCarrier.toLowerCase().includes('telnyx')) legalCarrier = '';
+            let carrier = null;
+            if (normalizedCarrier && legalCarrier && normalizedCarrier !== legalCarrier) {
+              carrier = `${normalizedCarrier} | ${legalCarrier}`;
+            } else if (legalCarrier) {
+              carrier = legalCarrier;
+            } else if (normalizedCarrier) {
+              carrier = normalizedCarrier;
+            }
+            if (carrier && carrier !== sub.carrier) {
+              await storageModule.supabase
+                .from('subscribers')
+                .update({ carrier })
+                .eq('id', sub.id);
+              sub.carrier = carrier;
+            }
+          } catch (e) {
+            // ignore lookup errors
+          }
+        }));
+      }
       res.json(subscribers);
     } catch (error) {
       console.error("Error fetching subscribers:", error);
