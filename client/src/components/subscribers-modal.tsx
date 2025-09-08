@@ -4,10 +4,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
-// ...removed useToast import...
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { formatPhoneNumber, validatePhoneNumber } from "@/lib/supabase";
-import { Trash2, X, Edit3, Search } from "lucide-react";
+import { Trash2, Edit3, Search } from "lucide-react";
 import type { Subscriber } from "@shared/schema";
 
 interface SubscribersModalProps {
@@ -16,17 +16,14 @@ interface SubscribersModalProps {
 }
 
 export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) {
-  // Debug: log modal open state
-  // ...removed test log...
   const [phoneNumber, setPhoneNumber] = useState("");
   const [subscriberName, setSubscriberName] = useState("");
   const [editingSubscriber, setEditingSubscriber] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  // ...removed toast usage...
-  // (keep only one set of these variables, defined below)
-  // ...removed toast usage...
+  const [sortBy, setSortBy] = useState<"name" | "joined_at">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const queryClient = useQueryClient();
   const {
@@ -38,35 +35,39 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/subscribers");
       const data = await response.json();
-      // Always sort by name A-Z, fallback to phone if no name
-      return data.sort((a: Subscriber, b: Subscriber) => {
-        const nameA = (a.name || a.phone_number || '').toLowerCase();
-        const nameB = (b.name || b.phone_number || '').toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
+      return data;
     },
     enabled: open,
   });
-  // Filter subscribers by search term (name or phone number)
+
+  // Filter + sort
   const filteredSubscribers = subscribers
     .filter((subscriber) => {
       if (!searchTerm.trim()) return true;
       const searchLower = searchTerm.toLowerCase();
       const name = (subscriber.name || '').toLowerCase();
       const nameMatch = name.includes(searchLower);
-      // Only use digit filtering for phone number search
       const phone = (subscriber.phone_number || '').replace(/\D/g, '');
       const searchDigits = searchTerm.replace(/\D/g, '');
       const phoneMatch = searchDigits.length > 0 && phone.includes(searchDigits);
       return nameMatch || phoneMatch;
     })
     .sort((a, b) => {
-      const nameA = (a.name || a.phone_number || '').toLowerCase();
-      const nameB = (b.name || b.phone_number || '').toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
+      let aVal: string | number = "";
+      let bVal: string | number = "";
 
-  // ...removed error toast...
+      if (sortBy === "name") {
+        aVal = (a.name || a.phone_number || "").toLowerCase();
+        bVal = (b.name || b.phone_number || "").toLowerCase();
+      } else if (sortBy === "joined_at") {
+        aVal = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+        bVal = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+      }
+
+      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
 
   const addSubscriberMutation = useMutation({
     mutationFn: async ({ phone, name }: { phone: string; name: string }) => {
@@ -81,10 +82,6 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
       setSubscriberName("");
-  // ...removed add success toast...
-    },
-    onError: (error: any) => {
-  // ...removed add error toast...
     },
   });
 
@@ -94,60 +91,17 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-  // ...removed remove success toast...
-    },
-    onError: (error: any) => {
-  // ...removed remove error toast...
     },
   });
 
   const reactivateSubscriberMutation = useMutation({
     mutationFn: async (id: string) => {
-      try {
-        //console.log("Sending PATCH request to reactivate subscriber:", {
-        //   url: `/api/subscribers/${id}`,
-        //   method: "PATCH",
-        //   body: { status: "active" },
-        // });
-
-        const response = await apiRequest("PATCH", `/api/subscribers/${id}`, { status: "active" });
-        const contentType = response.headers.get("content-type");
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API Error Response:", {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-            body: errorText,
-          });
-          throw new Error(`Failed to reactivate subscriber with ID: ${id}`);
-        }
-
-        if (contentType && contentType.includes("application/json")) {
-          return response.json();
-        } else {
-          const errorText = await response.text();
-          console.error("Unexpected Response Format:", {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-            body: errorText,
-          });
-          throw new Error("Unexpected response format from server.");
-        }
-      } catch (error) {
-        console.error("Error during API call:", error);
-        throw error;
-      }
+      const response = await apiRequest("PATCH", `/api/subscribers/${id}`, { status: "active" });
+      if (!response.ok) throw new Error("Failed to reactivate");
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      //console.log("Subscriber reactivated successfully.");
-    },
-    onError: (error: any) => {
-      console.error("Failed to reactivate subscriber:", error);
-      window.alert("Failed to reactivate subscriber. Please try again.");
     },
   });
 
@@ -161,10 +115,6 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       setEditingSubscriber(null);
       setEditingName("");
     },
-    onError: (error: any) => {
-      console.error("Failed to update subscriber name:", error);
-      window.alert("Failed to update subscriber name. Please try again.");
-    },
   });
 
   const handleAddSubscriber = () => {
@@ -173,7 +123,6 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       window.alert("Please enter a valid phone number");
       return;
     }
-    // Enforce E.164 format
     let formatted = phoneNumber.replace(/\D/g, '');
     if (formatted.length === 10) {
       formatted = '+1' + formatted;
@@ -232,16 +181,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const inactiveSubscribers = subscribers.filter((subscriber) => subscriber.status === "inactive").length;
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(openState) => {
-        //console.log('Dialog onOpenChange:', openState);
-        onOpenChange(openState);
-        if (!openState) {
-          // ...removed debug toast and related lines...
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-2xl w-full p-0"
         style={{
@@ -260,15 +200,43 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         }}
       >
         <DialogHeader>
-          <div className="flex flex-row items-center w-full gap-2">
-            <div className="flex-1 min-w-0 pt-10">
-              <DialogTitle>Manage Subscribers</DialogTitle>
-              <div className="text-sm text-muted-foreground">
-                Active: {activeSubscribers} | Inactive: {inactiveSubscribers}
-              </div>
-            </div>
-            {/* Search Bar Top Right, with max-w-xs to avoid overlap */}
-            <div className="relative flex items-center max-w-xs w-full pt-10">
+          <DialogTitle>Manage Subscribers</DialogTitle>
+          <div className="text-sm text-muted-foreground mb-2">
+            Active: {activeSubscribers} | Inactive: {inactiveSubscribers}
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Add Subscriber */}
+          <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
+            <Input
+              type="text"
+              placeholder="Name"
+              value={subscriberName}
+              onChange={(e) => setSubscriberName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscriber(); }}
+              data-testid="input-subscriber-name"
+              className="flex-1 min-w-0"
+              tabIndex={-1}
+            />
+            <Input
+              type="tel"
+              placeholder="Phone Number"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscriber(); }}
+              data-testid="input-phone-number"
+              className="flex-1 min-w-0"
+              tabIndex={-1}
+            />
+            <Button onClick={handleAddSubscriber} disabled={addSubscriberMutation.isPending} data-testid="button-add-subscriber">
+              {addSubscriberMutation.isPending ? "Adding..." : "Add"}
+            </Button>
+          </div>
+
+          {/* Search & Sort Controls */}
+          <div className="flex flex-col sm:flex-row gap-2 w-full items-center justify-between pb-2" style={{paddingLeft: 0, paddingRight: 0}}>
+            <div className="relative flex-1 w-full max-w-md" style={{paddingLeft: 0}}>
               <Input
                 type="text"
                 placeholder="Search by name or phone number"
@@ -279,68 +247,43 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                 style={{ minWidth: 0, width: '100%' }}
                 tabIndex={-1}
               />
-              <span className="absolute left-3 text-gray-400 pointer-events-none">
+              <span className="absolute left-3 top-2.5 text-gray-400 pointer-events-none">
                 <Search className="w-5 h-5" />
               </span>
             </div>
+            <div className="flex flex-row gap-2 items-center w-full sm:w-auto">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Sort:</span>
+              <Select value={sortBy} onValueChange={(val) => setSortBy(val as "name" | "joined_at")}> 
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Sort By" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="joined_at">Subscribed Date</SelectItem>
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                aria-label={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="ml-1 text-lg flex items-center bg-transparent border-none shadow-none hover:bg-transparent focus:outline-none"
+                style={{ minWidth: 24, padding: 0, boxShadow: 'none' }}
+              >
+                {sortOrder === 'asc' ? <span title="Ascending" style={{fontSize:18,lineHeight:1}}>&uarr;</span> : <span title="Descending" style={{fontSize:18,lineHeight:1}}>&darr;</span>}
+              </button>
+            </div>
           </div>
-        </DialogHeader>
-        <div className="space-y-4">
-          {/* Add Subscriber */}
-          <div className="flex flex-col md:flex-row gap-2 p-4 border-b border-border items-center">
-          <Input
-            type="text"
-            placeholder="Name"
-            value={subscriberName}
-            onChange={(e) => setSubscriberName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleAddSubscriber();
-              }
-            }}
-            data-testid="input-subscriber-name"
-            className="flex-1 min-w-0"
-            tabIndex={-1}
-          />
-          <Input
-            type="tel"
-            placeholder="Phone Number"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleAddSubscriber();
-              }
-            }}
-            data-testid="input-phone-number"
-            className="flex-1 min-w-0"
-            tabIndex={-1}
-          />
-            <Button 
-              onClick={handleAddSubscriber}
-              disabled={addSubscriberMutation.isPending}
-              data-testid="button-add-subscriber"
-            >
-              {addSubscriberMutation.isPending ? "Adding..." : "Add"}
-            </Button>
-          </div>
-
-
 
           {/* Subscribers List */}
           <div className="overflow-y-auto bg-white rounded-lg space-y-2" style={{ maxHeight: '70vh', paddingBottom: 48 }}>
             {isLoading ? (
-              <div className="text-center py-4 text-muted-foreground">
-                Loading subscribers...
-              </div>
+              <div className="text-center py-4 text-muted-foreground">Loading subscribers...</div>
             ) : filteredSubscribers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No subscribers found.
-              </div>
+              <div className="text-center py-8 text-muted-foreground">No subscribers found.</div>
             ) : (
               <>
                 {filteredSubscribers.map((subscriber) => (
-                  <div 
+                  <div
                     key={subscriber.id}
                     className="flex items-center justify-between p-2 border border-border rounded-lg hover:bg-muted/50"
                     data-testid={`subscriber-${subscriber.id}`}
@@ -395,13 +338,14 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                     </div>
                   </div>
                 ))}
-                {/* Spacer to ensure last subscriber is always visible */}
                 <div style={{ minHeight: 40, pointerEvents: 'none' }} />
               </>
             )}
           </div>
         </div>
       </DialogContent>
+
+      {/* Edit Subscriber Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent style={{ top: '10vh', left: '50%', transform: 'translateX(-50%)', position: 'fixed', maxWidth: 400, width: '90vw' }}>
           <DialogHeader>
@@ -415,15 +359,10 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
               placeholder="Enter new name"
             />
             <div className="flex justify-end space-x-2">
-              <Button
-                onClick={handleUpdateSubscriberName}
-                disabled={updateSubscriberNameMutation.isPending}
-              >
+              <Button onClick={handleUpdateSubscriberName} disabled={updateSubscriberNameMutation.isPending}>
                 {updateSubscriberNameMutation.isPending ? "Saving..." : "Save"}
               </Button>
-              <Button variant="ghost" onClick={handleCloseEditModal}>
-                Cancel
-              </Button>
+              <Button variant="ghost" onClick={handleCloseEditModal}>Cancel</Button>
             </div>
           </div>
         </DialogContent>
