@@ -42,7 +42,7 @@ async function sendMessageAndLog({
   }
   const telnyxNumber = from || process.env.TELNYX_PHONE_NUMBER;
   const profileId = messaging_profile_id || process.env.TELNYX_MESSAGING_PROFILE_ID;
-  const webhookUrl = webhook_url || `${process.env.WEBHOOK_BASE_URL}/api/webhooks/telnyx`;
+  const webhookUrl = webhook_url || `${process.env.WEBHOOK_BASE_URL}`;
   let status = 'unknown';
   let error_message = null;
   let telnyxMsgId = null;
