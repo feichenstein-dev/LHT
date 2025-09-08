@@ -150,12 +150,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/messages", async (req, res) => {
     try {
-      const messageData = insertMessageSchema.parse(req.body);
-      const message = await storage.createMessage(messageData);
-      if (!message) {
-        throw new Error('Failed to create message');
+      let message;
+      let messageId;
+      // If message_id is provided (e.g. for retry), fetch the message, else create new
+      if (req.body.message_id) {
+        console.log('[DEBUG] Incoming message_id for retry:', req.body.message_id, '| type:', typeof req.body.message_id);
+        message = await storage.getMessageById(req.body.message_id);
+        console.log('[DEBUG] getMessageById result:', message);
+        if (!message) {
+          throw new Error('Message not found for provided message_id');
+        }
+        messageId = message.id;
+      } else {
+        const messageData = insertMessageSchema.parse(req.body);
+        message = await storage.createMessage(messageData);
+        if (!message) {
+          throw new Error('Failed to create message');
+        }
+        messageId = message.id;
       }
-      const messageId = message.id;
 
       // Accept numbers (single or array) in the request body
       let numbers: string[] = [];
@@ -185,7 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = await sendMessageAndLog({
           to: subscriber.phone_number,
           text: message.body,
-          message_id: message.id,
+          message_id: messageId,
           name: subscriber.name ?? null,
           direction: 'outbound',
           subscriber_id: subscriber.id ?? null,
@@ -203,15 +216,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update the delivered_count field in the messages table
       if (message) {
-        console.log(`Updating delivered_count for message ID ${message.id} with successCount: ${successCount}`);
+        console.log(`Updating delivered_count for message ID ${messageId} with successCount: ${successCount}`);
         const { error: updateError } = await storageModule.supabase
           .from('messages')
           .update({ delivered_count: successCount })
-          .eq('id', message.id);
+          .eq('id', messageId);
         if (updateError) {
-          console.error(`Failed to update delivered_count for message ID ${message.id}:`, updateError);
+          console.error(`Failed to update delivered_count for message ID ${messageId}:`, updateError);
         } else {
-          console.log(`Successfully updated delivered_count for message ID ${message.id}`);
+          console.log(`Successfully updated delivered_count for message ID ${messageId}`);
         }
       }
 
@@ -471,64 +484,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test Telnyx configuration endpoint
-  app.get("/api/test-telnyx", async (req, res) => {
-    try {
-      const apiKey = process.env.TELNYX_API_KEY;
-      const phoneNumber = process.env.TELNYX_PHONE_NUMBER;
-      
-      console.log("Testing Telnyx configuration...");
-      
-      if (apiKey) {
-        console.log(`API Key format: ${apiKey.substring(0, 10)}... (${apiKey.length} chars)`);
-      }
-      
-      if (!apiKey) {
-        return res.status(400).json({ error: "TELNYX_API_KEY not set" });
-      }
-      
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "TELNYX_PHONE_NUMBER not set" });
-      }
-      
-      // Check API key format
-      if (!apiKey.startsWith('KEY')) {
-        return res.status(400).json({ 
-          error: "invalid API key format. Telnyx API keys should start with 'KEY'",
-          current: `${apiKey.substring(0, 10)}...`,
-          hint: "Get your API key from https://portal.telnyx.com/#/app/api-keys"
-        });
-      }
-      
-      // Test authentication by making a simple API call
-      const telnyxClient = new Telnyx(apiKey);
-      console.log("Testing Telnyx authentication...");
-      await telnyxClient.phoneNumbers.list({ page: { size: 1 } });
-      
-      res.json({ 
-        status: "success", 
-        message: "Telnyx configuration is valid",
-        phoneNumber: phoneNumber,
-        apiKeyFormat: `${apiKey.substring(0, 10)}...`
-      });
-    } catch (error: any) {
-      console.error("Telnyx test error:", error);
-      res.status(400).json({ 
-        error: "Telnyx configuration failed",
-        message: error.message,
-        statusCode: error.statusCode || 'unknown',
-        hint: "Check your TELNYX_API_KEY and ensure it's valid"
-      });
-    }
-  });
 
   // Telnyx webhook endpoint for delivery status updates
   app.post("/api/webhooks/telnyx", async (req, res) => {
     try {
+        // TOP-LEVEL DEBUG: Log every incoming webhook request, regardless of structure
+        console.log('========== Telnyx Webhook: RAW REQUEST ==========');
+        try {
+          console.log('[WEBHOOK DEBUG] req.body:', JSON.stringify(req.body));
+        } catch (e) {
+          console.log('[WEBHOOK DEBUG] req.body (unstringifiable):', req.body);
+        }
         const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
         const apiKey = process.env.TELNYX_API_KEY;
-        console.log('========== Telnyx Webhook Received ==========');
-        console.log('[BACKEND] Raw webhook body:', JSON.stringify(req.body, null, 2));
         const { data } = req.body;
         if (data) {
             console.log('[BACKEND] Webhook event_type:', data.event_type);
@@ -602,32 +570,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
             }
 
-      // Update the original delivery log row (status 'sent') to the final status
-      // Try to match by phone_number and message_text, and status 'sent'
-      // If you have message_id or telnyx_message_id, you can use those as well
-      console.log('[WEBHOOK DEBUG] phone_number:', phone_number);
-      console.log('[WEBHOOK DEBUG] message_text:', text);
-      console.log('[WEBHOOK DEBUG] status to write:', status);
-      console.log('[WEBHOOK DEBUG] telnyx_message_id:', telnyxMessageId);
-      console.log('[WEBHOOK DEBUG] error_message:', combinedError);
-      console.log('[WEBHOOK DEBUG] direction: outbound');
-      const { error: updateError, data: updateData } = await storageModule.supabase
-        .from('delivery_logs')
-        .update({
-          status,
-          telnyx_message_id: telnyxMessageId,
-          error_message: combinedError
-        })
-        .match({
-          phone_number,
-          message_text: text,
-          status: 'sent',
-          direction: 'outbound'
-        });
-      console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
+      // Prefer to match by telnyx_message_id if present, else fallback to phone_number/message_text
+      let updateResult;
+      if (telnyxMessageId) {
+        // Try to update by telnyx_message_id
+        updateResult = await storageModule.supabase
+          .from('delivery_logs')
+          .update({
+            status,
+            telnyx_message_id: telnyxMessageId,
+            error_message: combinedError
+          })
+          .match({
+            telnyx_message_id: telnyxMessageId,
+            direction: 'outbound'
+          });
+        console.log('[WEBHOOK DEBUG] update by telnyx_message_id result:', updateResult.data, '| error:', updateResult.error);
+      }
+      // If no telnyx_message_id or no rows updated, fallback to phone_number/message_text
+      if (
+        !telnyxMessageId ||
+        (updateResult && Array.isArray(updateResult.data) && (updateResult.data as any[]).length === 0)
+      ) {
+        updateResult = await storageModule.supabase
+          .from('delivery_logs')
+          .update({
+            status,
+            telnyx_message_id: telnyxMessageId,
+            error_message: combinedError
+          })
+          .match({
+            phone_number,
+            message_text: text,
+            status: 'sent',
+            direction: 'outbound'
+          });
+        console.log('[WEBHOOK DEBUG] fallback update by phone/message result:', updateResult.data, '| error:', updateResult.error);
+      }
 
-      if (updateError) {
-        console.error('[BACKEND] Failed to update delivery log status:', updateError);
+      if (updateResult && updateResult.error) {
+        console.error('[BACKEND] Failed to update delivery log status:', updateResult.error);
         // Optionally, fall back to inserting a new log if update fails
         await storage.createDeliveryLog({
           message_id: null, // If you have message_id, pass it here

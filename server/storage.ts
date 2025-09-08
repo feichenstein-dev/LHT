@@ -256,7 +256,17 @@ export class FallbackStorage implements IStorage {
   }
 
   async getMessageById(id: string): Promise<Message | undefined> {
-    return await this.memoryStorage.getMessageById(id);
+    // Query Supabase for the message by id
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) {
+      console.error('Supabase error (getMessageById):', error, 'for id:', id);
+      return undefined;
+    }
+    return data ?? undefined;
   }
 
   async getSubscribers(): Promise<Subscriber[]> {
