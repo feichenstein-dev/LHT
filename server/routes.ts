@@ -274,15 +274,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/subscribers", async (req, res) => {
     try {
       let subscribers = await storage.getSubscribers() as Array<{ id: string; name: string | null; phone_number: string; joined_at: Date | null; status: string | null; carrier?: string }>;
-      // For each subscriber, update their carrier by making a carrier lookup call
       const apiKey = process.env.TELNYX_API_KEY;
       if (apiKey) {
-        const telnyx = require('telnyx')(apiKey);
+        const telnyx = new Telnyx(apiKey);
         await Promise.all(subscribers.map(async (sub) => {
           try {
-            const lookup = await telnyx.numberLookup.lookup(sub.phone_number);
-            let normalizedCarrier = lookup.data.carrier && lookup.data.carrier.name ? lookup.data.carrier.name : '';
-            let legalCarrier = lookup.data.carrier && lookup.data.carrier.full_name ? lookup.data.carrier.full_name : '';
+            // Telnyx number lookup API via REST (recommended)
+            const fetch = (await import('node-fetch')).default;
+            const resp = await fetch(`https://api.telnyx.com/v2/number_lookup/${encodeURIComponent(sub.phone_number)}`,
+              {
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+              }
+            );
+            const lookupResp = await resp.json();
+            const lookup = lookupResp.data;
+            let normalizedCarrier = lookup.carrier && lookup.carrier.name ? lookup.carrier.name : '';
+            let legalCarrier = lookup.carrier && lookup.carrier.full_name ? lookup.carrier.full_name : '';
             if (normalizedCarrier && normalizedCarrier.toLowerCase().includes('telnyx')) normalizedCarrier = '';
             if (legalCarrier && legalCarrier.toLowerCase().includes('telnyx')) legalCarrier = '';
             let carrier = null;
@@ -504,291 +511,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return log;
         })
       );
-
-      res.json({
-        logs: enhancedLogs,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total: total ?? 0,
-          totalPages: Math.max(1, Math.ceil((total ?? 0) / limitNum)),
-        },
-      });
+      res.json({ logs: enhancedLogs, total });
     } catch (error) {
       console.error("Error fetching delivery logs:", error);
       res.status(500).json({ message: "Failed to fetch delivery logs" });
     }
   });
-
-  app.get("/api/delivery-stats", async (req, res) => {
-    try {
-      const stats = await storage.getDeliveryStats();
-      res.json(stats);
-    } catch (error) {
-      console.error("Error fetching delivery stats:", error);
-      res.status(500).json({ message: "Failed to fetch delivery stats" });
-    }
-  });
-
-
-  // Telnyx webhook endpoint for delivery status updates
-  app.post("/api/webhooks/telnyx", async (req, res) => {
-    try {
-      // TOP-LEVEL DEBUG: Log every incoming webhook request, regardless of structure
-      console.log('========== Telnyx Webhook: RAW REQUEST ==========');
-      try {
-        console.log('[WEBHOOK DEBUG] req.body:', JSON.stringify(req.body));
-      } catch (e) {
-        console.log('[WEBHOOK DEBUG] req.body (unstringifiable):', req.body);
-      }
-      const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
-      const apiKey = process.env.TELNYX_API_KEY;
-      const { data } = req.body;
-      if (data) {
-        console.log('[BACKEND] Webhook event_type:', data.event_type);
-        if (data.payload) {
-          console.log('[BACKEND] Webhook payload:', JSON.stringify(data.payload, null, 2));
-        }
-      }
-
-      if (data && data.event_type === "message.finalized") {
-        console.log('Processing message.finalized webhook...');
-        const {
-          id: telnyxMessageId,
-          to,
-          text,
-          from
-        } = data.payload;
-
-        // Extract delivery status from the 'to' array if present
-        let status = "sent";
-        let phone_number = "";
-        let name = null;
-        let carrier = null;
-
-        // If 'to' is an array, use the first element's status, phone_number, and carrier
-        if (Array.isArray(to) && to.length > 0) {
-          status = to[0].status || "sent";
-          phone_number = to[0].phone_number || "";
-        } else if (typeof to === "string") {
-          phone_number = to;
-        } else if (to && typeof to.phone_number === "string") {
-          phone_number = to.phone_number;
-        }
-
-        if (from && typeof from.name === "string") {
-          name = from.name;
-        }
-
-        // Fetch subscriber details if available
-        const subscriber = await storage.getSubscriberByPhone(phone_number);
-        if (subscriber) {
-          name = subscriber.name;
-        }
-
-        // Extract error code and message if present
-        let errorMessage = null;
-        let errorCode = null;
-        if (data.payload.errors && Array.isArray(data.payload.errors) && data.payload.errors.length > 0) {
-          errorMessage = data.payload.errors.map((e: any) => e.detail || e.title || JSON.stringify(e)).join('; ');
-          errorCode = data.payload.errors.map((e: any) => e.code || '').filter(Boolean).join('; ');
-        } else if (data.payload.error_code) {
-          errorCode = data.payload.error_code;
-        }
-        let combinedError = null;
-        if (errorCode && errorMessage) {
-          combinedError = `Code: ${errorCode} | Message: ${errorMessage}`;
-        } else if (errorCode) {
-          combinedError = `Code: ${errorCode}`;
-        } else if (errorMessage) {
-          combinedError = errorMessage;
-        }
-
-        // Log delivery status updates for messages sent from your Telnyx number
-        if (typeof from === 'string' && from === telnyxNumber) {
-          console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
-        }
-
-        // Prefer to match by telnyx_message_id if present, else fallback to phone_number/message_text
-        let updateResult;
-        if (telnyxMessageId) {
-          // Try to update by telnyx_message_id
-          updateResult = await storageModule.supabase
-            .from('delivery_logs')
-            .update({
-              status,
-              telnyx_message_id: telnyxMessageId,
-              error_message: combinedError,
-              carrier,
-            })
-            .match({
-              telnyx_message_id: telnyxMessageId,
-              direction: 'outbound'
-            });
-          console.log('[WEBHOOK DEBUG] update by telnyx_message_id result:', updateResult.data, '| error:', updateResult.error);
-        }
-        // If no telnyx_message_id or no rows updated, fallback to phone_number/message_text
-        if (
-          !telnyxMessageId ||
-          (updateResult && Array.isArray(updateResult.data) && (updateResult.data as any[]).length === 0)
-        ) {
-          updateResult = await storageModule.supabase
-            .from('delivery_logs')
-            .update({
-              status,
-              telnyx_message_id: telnyxMessageId,
-              error_message: combinedError
-            })
-            .match({
-              phone_number,
-              message_text: text,
-              direction: 'outbound'
-            });
-          console.log('[WEBHOOK DEBUG] fallback update by phone/message result:', updateResult.data, '| error:', updateResult.error);
-        }
-
-        if (updateResult && updateResult.error) {
-          console.error('[BACKEND] Failed to update delivery log status:', updateResult.error);
-          // Optionally, fall back to inserting a new log if update fails
-          await storage.createDeliveryLog({
-            message_id: null, // If you have message_id, pass it here
-            subscriber_id: subscriber ? subscriber.id : null,
-            status,
-            telnyx_message_id: telnyxMessageId,
-            direction: "outbound",
-            message_text: text,
-            name,
-            phone_number,
-            error_message: combinedError,
-            carrier,
-          });
-          console.log('[BACKEND] Inserted new delivery log due to update failure.');
-        } else {
-          console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
-        }
-      }
-
-      if (data && data.event_type === "message.received") {
-        const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
-        const text = data.payload.text;
-        // Log if the inbound message is from your Telnyx number
-        if (from === telnyxNumber) {
-          console.warn('[BACKEND] Inbound SMS is from your own Telnyx number:', from);
-        }
-        console.log('[BACKEND] Inbound SMS received:');
-        console.log('  From:', from);
-        console.log('  Text:', text);
-        console.log('  Full payload:', JSON.stringify(data.payload, null, 2));
-        const joinMatch = text.match(/^join(.*)$/i);
-        const stopMatch = text.match(/^stop$/i);
-        const startMatch = text.match(/^start$/i);
-        let name = null;
-        let subscriber = await storage.getSubscriberByPhone(from);
-
-        // Always log the inbound message ONCE, before any keyword logic
-        await storage.createDeliveryLog({
-          message_id: null,
-          subscriber_id: subscriber ? subscriber.id : null,
-          status: "received",
-          direction: "inbound",
-          message_text: text,
-          name: subscriber ? subscriber.name : null,
-          phone_number: from,
-        });
-
-        // JOIN keyword logic
-        if (joinMatch) {
-          name = joinMatch[1].trim();
-          if (name === "") name = null;
-          if (!subscriber) {
-            await storage.createSubscriber({ phone_number: from, name });
-            subscriber = await storage.getSubscriberByPhone(from);
-          } else {
-            if (name && name !== subscriber.name) {
-              const now = new Date().toISOString();
-              await storageModule.supabase
-                .from('subscribers')
-                .update({ name, updated_at: now })
-                .eq('id', subscriber.id);
-              subscriber = await storage.getSubscriberByPhone(from);
-            }
-            if (subscriber && subscriber.status !== 'active') {
-              const now = new Date().toISOString();
-              await storageModule.supabase
-                .from('subscribers')
-                .update({ status: 'active', updated_at: now })
-                .eq('id', subscriber.id);
-              subscriber = await storage.getSubscriberByPhone(from);
-            }
-          }
-          // Log the welcome reply (outbound)
-          if (apiKey && telnyxNumber) {
-            const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-            console.log('[BACKEND] Sending JOIN reply to', from);
-            await sendMessageAndLog({
-              to: from,
-              text: replyText,
-              name: subscriber?.name ?? null,
-              direction: 'outbound',
-              storage,
-            });
-          }
-        }
-        // START keyword logic (unblock and send welcome)
-        else if (startMatch) {
-          // Unblock the subscriber in DB
-          await storage.unblockSubscriber(from);
-          // Send welcome message
-          if (apiKey && telnyxNumber) {
-            const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-            console.log('[BACKEND] Sending START reply to', from);
-            await sendMessageAndLog({
-              to: from,
-              text: replyText,
-              name: subscriber?.name ?? null,
-              direction: 'outbound',
-              storage,
-            });
-          }
-        }
-        // HELP keyword logic
-        else if (text.match(/^help$/i)) {
-          if (apiKey && telnyxNumber) {
-            const replyText = `You are currently subscribed to Sefer Chofetz Chaim Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
-            console.log('[BACKEND] Sending HELP reply to', from);
-            await sendMessageAndLog({
-              to: from,
-              text: replyText,
-              name: subscriber?.name ?? null,
-              direction: 'outbound',
-              storage,
-            });
-          }
-        }
-        // STOP keyword logic
-        else if (stopMatch) {
-          let wasActive = subscriber && subscriber.status === 'active';
-          if (wasActive) {
-            if (subscriber) {
-              // Set status to 'blocked' instead of deleting
-              await storage.updateSubscriberStatus(subscriber.id, 'blocked');
-            }
-          }
-          // Do not send or log any outbound message after STOP. Let carrier handle auto-reply if enabled.
-          // TIP: If you want to avoid carrier-level blocks, use a custom keyword like "PAUSE" instead of "STOP". In your logic, handle "pause" by setting the subscriber status to "paused" and do not send any more messages until they text "resume". This way, you keep control and avoid the carrier's opt-out system.
-        }
-        // All other inbound messages
-        else {
-        }
-      }
-
-      res.status(200).json({ received: true });
-    } catch (error) {
-      console.error("Error processing Telnyx webhook:", error);
-      res.status(500).json({ message: "Failed to process webhook" });
-      console.log('========== End Telnyx Webhook ==========');
-    }
-  });
+// ...existing code...
 
   // Login endpoint
   app.post("/api/login", async (req, res) => {
