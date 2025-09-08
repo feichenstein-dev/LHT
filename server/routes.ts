@@ -291,9 +291,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subscriberData = insertSubscriberSchema.parse(req.body);
       // Check if subscriber already exists
       const existing = await storage.getSubscriberByPhone(subscriberData.phone_number);
-      if (existing) {
-        return res.status(400).json({ message: "Subscriber with this phone number already exists" });
-      }
 
       // Lookup carrier info using Telnyx Number Lookup API
       let carrier = null;
@@ -302,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (apiKey) {
           const telnyx = require('telnyx')(apiKey);
           const lookup = await telnyx.numberLookup.lookup(subscriberData.phone_number);
+          console.log('[Telnyx Number Lookup] Full response:', JSON.stringify(lookup, null, 2));
           const fromCarrier = lookup.data.carrier && lookup.data.carrier.name ? lookup.data.carrier.name : '';
           const toCarrier = lookup.data.carrier && lookup.data.carrier.full_name ? lookup.data.carrier.full_name : '';
           if (fromCarrier && toCarrier && fromCarrier !== toCarrier) {
@@ -315,10 +313,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } catch (e) {
-        // ignore lookup errors
+        console.error('[Telnyx Number Lookup] Error:', e);
       }
 
-      const subscriber = await storage.createSubscriber({ ...subscriberData, carrier });
+      let subscriber;
+      if (existing) {
+        // Update status to active and update carrier
+        const now = new Date().toISOString();
+        const { data, error } = await storageModule.supabase
+          .from('subscribers')
+          .update({ status: 'active', updated_at: now, carrier })
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+        if (error) {
+          console.error('Supabase error (updateSubscriber):', error);
+          return res.status(500).json({ message: "Failed to update subscriber" });
+        }
+        subscriber = data;
+      } else {
+        subscriber = await storage.createSubscriber({ ...subscriberData, carrier });
+      }
 
       // Send welcome text if possible
       const apiKey = process.env.TELNYX_API_KEY;
