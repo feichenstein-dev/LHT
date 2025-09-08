@@ -317,5 +317,5 @@ const logMessageStatus = async (
 };
 
 const handleRetryMessage = (messageId: string) => {
-  console.log(`Retrying message with ID: ${messageId}`);
+  //console.log(`Retrying message with ID: ${messageId}`);
 };

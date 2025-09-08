@@ -104,11 +104,11 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const reactivateSubscriberMutation = useMutation({
     mutationFn: async (id: string) => {
       try {
-        console.log("Sending PATCH request to reactivate subscriber:", {
-          url: `/api/subscribers/${id}`,
-          method: "PATCH",
-          body: { status: "active" },
-        });
+        //console.log("Sending PATCH request to reactivate subscriber:", {
+        //   url: `/api/subscribers/${id}`,
+        //   method: "PATCH",
+        //   body: { status: "active" },
+        // });
 
         const response = await apiRequest("PATCH", `/api/subscribers/${id}`, { status: "active" });
         const contentType = response.headers.get("content-type");
@@ -143,7 +143,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      console.log("Subscriber reactivated successfully.");
+      //console.log("Subscriber reactivated successfully.");
     },
     onError: (error: any) => {
       console.error("Failed to reactivate subscriber:", error);
@@ -235,7 +235,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     <Dialog
       open={open}
       onOpenChange={(openState) => {
-        console.log('Dialog onOpenChange:', openState);
+        //console.log('Dialog onOpenChange:', openState);
         onOpenChange(openState);
         if (!openState) {
           // ...removed debug toast and related lines...

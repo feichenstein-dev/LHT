@@ -228,14 +228,14 @@ export class FallbackStorage implements IStorage {
       .select('*', { count: 'exact' })
       .eq('status', 'active');
 
-    console.log('Active Subscribers Count:', activeCount, 'Error:', activeError);
+    //console.log('Active Subscribers Count:', activeCount, 'Error:', activeError);
     const activeCountValue = activeCount || 0;
 
     // Assume delivered count comes from Telnyx response (placeholder for now)
     const deliveredCount = message.delivered_count || 0; // Replace with actual Telnyx response logic
 
-    console.log('Inserting message with activeCount:', activeCountValue);
-    console.log('Final Active Subscribers Count:', activeCountValue);
+    //console.log('Inserting message with activeCount:', activeCountValue);
+    //console.log('Final Active Subscribers Count:', activeCountValue);
 
     const { data, error } = await supabase
       .from('messages')
@@ -275,7 +275,7 @@ export class FallbackStorage implements IStorage {
   async getSubscribers(): Promise<Subscriber[]> {
     // Fetch subscribers from Supabase
     const { data, error } = await supabase.from('subscribers').select('*');
-    //console.log('SERVER LOG: Supabase getSubscribers response:', { data, error });
+    ////console.log('SERVER LOG: Supabase getSubscribers response:', { data, error });
     if (error) {
       console.error('Supabase error:', error);
       return [];
@@ -421,7 +421,7 @@ export class FallbackStorage implements IStorage {
     };
 
     // Log the data being inserted for debugging
-    console.log('Data being inserted into delivery_logs:', JSON.stringify(logEntry, null, 2));
+    //console.log('Data being inserted into delivery_logs:', JSON.stringify(logEntry, null, 2));
 
     // Insert the log into the database
     const { data, error } = await supabase
@@ -447,7 +447,7 @@ export class FallbackStorage implements IStorage {
       }
     }
 
-    console.log('Supabase response for delivery_logs:', JSON.stringify(data, null, 2));
+    //console.log('Supabase response for delivery_logs:', JSON.stringify(data, null, 2));
     return data;
   }
 

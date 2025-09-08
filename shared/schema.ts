@@ -39,6 +39,8 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export const insertSubscriberSchema = createInsertSchema(subscribers).omit({
   id: true,
   joined_at: true,
+}).extend({
+  carrier: z.string().nullable().optional(),
 });
 
 export const insertDeliveryLogSchema = createInsertSchema(delivery_logs).omit({
