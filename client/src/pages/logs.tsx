@@ -1,3 +1,17 @@
+import { useRef } from "react";
+// Simple modal for tap-to-expand (must be inside Logs for state)
+function ExpandModal({ open, onClose, value, label }: { open: boolean, onClose: () => void, value: string, label?: string }) {
+  if (!open) return null;
+  return (
+    <div style={{ position: 'fixed', zIndex: 10000, top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: 'white', borderRadius: 16, padding: 24, minWidth: 280, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 2px 16px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 12 }}>{label || 'Full Value'}</div>
+        <div style={{ fontSize: 15, wordBreak: 'break-all', whiteSpace: 'pre-wrap', fontFamily: 'inherit', color: '#222' }}>{value}</div>
+        <button style={{ marginTop: 18, padding: '6px 18px', borderRadius: 8, background: '#eee', fontWeight: 500 }} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import DatePicker from "react-datepicker";
@@ -21,6 +35,14 @@ function formatDate(dateStr: string) {
 }
 
 export default function Logs() {
+  // Tap-to-expand state (must be inside component)
+  const [expandValue, setExpandValue] = useState<string | null>(null);
+  const [expandLabel, setExpandLabel] = useState<string | undefined>(undefined);
+  const handleExpand = (value: string, label?: string) => {
+    setExpandValue(value);
+    setExpandLabel(label);
+  };
+  const handleCloseExpand = () => setExpandValue(null);
   const queryClient = useQueryClient();
   // Inject custom styles for the datepicker clear button and disable pull-to-refresh/overscroll
   useEffect(() => {
@@ -308,7 +330,7 @@ export default function Logs() {
 
   return (
   <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2 logs-disable-overscroll">
-      <Card className="w-full max-w-screen-xl mx-auto">
+      <Card className="w-full max-w-[100vw] mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
         </CardHeader>
@@ -378,32 +400,59 @@ export default function Logs() {
               </div>
             </div>
           </div>
-          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxWidth: '100vw', maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overflowX: 'hidden' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : direction === 'lht' ? (
-              <Table className="w-full" style={{ tableLayout: 'auto' }}>
+              <Table className="w-full" style={{ tableLayout: 'fixed', whiteSpace: 'nowrap' }}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground">Message</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground">Sent At</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '14%' }}>Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Sent At</TableHead>
                     {statusOptions.map((status, idx) => (
-                      <TableHead key={idx} className="text-base font-semibold text-center text-foreground">{status.charAt(0).toUpperCase() + status.slice(1)}</TableHead>
+                      <TableHead key={idx} className="text-base font-semibold text-center text-foreground" style={{ width: '7%' }}>{status.charAt(0).toUpperCase() + status.slice(1)}</TableHead>
                     ))}
-                    <TableHead className="text-base font-semibold text-center text-foreground">Subscribers</TableHead>
-                    <TableHead className="text-base font-semibold text-center text-foreground">Details</TableHead>
+                    <TableHead className="text-base font-semibold text-center text-foreground" style={{ width: '10%' }}>Subscribers</TableHead>
+                    <TableHead className="text-base font-semibold text-center text-foreground" style={{ width: '10%' }}>Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {groupedLHT.map((msg: any) => (
                     <>
                       <TableRow key={msg.message_id} style={{ width: '100%', background: expandedMsgId === msg.message_id ? 'rgba(0,0,0,0.01)' : undefined }}>
-                        <TableCell className="truncate text-base" style={{ maxWidth: 300 }} title={msg.message_text || ''}>{msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}</TableCell>
-                        <TableCell className="text-sm" style={{ color: 'black' }}>{formatDate(msg.sent_at)}</TableCell>
+                        <TableCell
+                          className="truncate text-base log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={msg.message_text || ''}
+                          onClick={() => handleExpand(msg.message_text || '', 'Message')}
+                        >
+                          {msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}
+                        </TableCell>
+                        <TableCell
+                          className="text-sm log-cell-ellipsis"
+                          style={{ color: 'black', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={formatDate(msg.sent_at)}
+                          onClick={() => handleExpand(formatDate(msg.sent_at), 'Sent At')}
+                        >
+                          {formatDate(msg.sent_at)}
+                        </TableCell>
                         {statusOptions.map((status, idx) => (
-                          <TableCell key={idx} className="text-center font-semibold text-base text-foreground">{statusCountsByMsg[msg.message_id]?.[status] || 0}</TableCell>
+                          <TableCell
+                            key={idx}
+                            className="text-center font-semibold text-base text-foreground log-cell-ellipsis"
+                            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            title={String(statusCountsByMsg[msg.message_id]?.[status] || 0)}
+                          >
+                            {statusCountsByMsg[msg.message_id]?.[status] || 0}
+                          </TableCell>
                         ))}
-                        <TableCell className="text-center font-semibold text-base text-foreground">{msg.current_active_subscribers}</TableCell>
+                        <TableCell
+                          className="text-center font-semibold text-base text-foreground log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          title={String(msg.current_active_subscribers)}
+                        >
+                          {msg.current_active_subscribers}
+                        </TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="outline" onClick={() => setExpandedMsgId(expandedMsgId === msg.message_id ? null : msg.message_id)}>
                             <Eye className="w-4 h-4 mr-1" />
@@ -426,11 +475,13 @@ export default function Logs() {
                                   <Table className="w-full">
                                     <TableHeader>
                                       <TableRow>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ width: '30%' }}>Name</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground">Phone Number</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground">Sent At</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground">Status</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground">Action</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }}>Name</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Phone Number</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }}>Carrier</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Sent At</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Status</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }}>Error Message</TableHead>
+                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Action</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -449,10 +500,16 @@ export default function Logs() {
                                           const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
                                           return (
                                             <TableRow key={log.id} className="hover:bg-gray-200">
-                                              <TableCell className="font-normal" style={{ width: '30%' }}>{sub?.name || log.name || "N/A"}</TableCell>
-                                              <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
-                                              <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
-                                              <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
+                                              <TableCell className="font-normal" style={{ width: '30%', cursor: 'pointer' }} onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')} title={sub?.name || log.name || 'N/A'}>{sub?.name || log.name || "N/A"}</TableCell>
+                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')} title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}>{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
+                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(log.carrier || sub?.carrier || '', 'Carrier')} title={log.carrier || sub?.carrier || ''}>{log.carrier || sub?.carrier || ''}</TableCell>
+                                              <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')} title={formatDate(log.updated_at)}>{formatDate(log.updated_at)}</TableCell>
+                                              <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')} title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
+                                              <TableCell className="text-left font-normal" style={{ cursor: log.error_message ? 'pointer' : undefined }} onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')} title={log.error_message || ''}>
+                                                {log.error_message ? (
+                                                  log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message
+                                                ) : ''}
+                                              </TableCell>
                                               <TableCell className="text-left font-normal">
                                                 <Button
                                                   size="sm"
@@ -478,14 +535,16 @@ export default function Logs() {
                 </TableBody>
               </Table>
             ) : (
-              <Table className="w-full" style={{ tableLayout: 'auto' }}>
+              <Table className="w-full" style={{ tableLayout: 'fixed', whiteSpace: 'nowrap' }}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '25%' }}>Message</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Name</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Phone Number</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '20%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '15%' }}>Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '14%' }}>Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '13%' }}>Name</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '13%' }}>Phone Number</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '13%' }}>Carrier</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '13%' }}>{direction === 'inbound' ? 'Received At' : 'Sent At'}</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Status</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '14%' }}>Error Message</TableHead>
                     {direction !== 'inbound' && (
                       <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Action</TableHead>
                     )}
@@ -497,12 +556,63 @@ export default function Logs() {
                     const msgText = (log.message_text || '').length > 100 ? `${log.message_text.slice(0, 100)}...` : (log.message_text || '');
                     return (
                       <TableRow key={log.id}>
-                        <TableCell className="truncate text-base" style={{ maxWidth: 300 }} title={log.message_text || ''}>{msgText}</TableCell>
-                        <TableCell className="font-normal">{sub?.name || log.name || ""}</TableCell>
-                        <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ""}</TableCell>
-                        <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
-                        <TableCell className="text-left font-normal">
+                        <TableCell
+                          className="truncate text-base log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={log.message_text || ''}
+                          onClick={() => handleExpand(log.message_text || '', 'Message')}
+                        >
+                          {msgText}
+                        </TableCell>
+                        <TableCell
+                          className="font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={sub?.name || log.name || ''}
+                          onClick={() => handleExpand(sub?.name || log.name || '', 'Name')}
+                        >
+                          {sub?.name || log.name || ""}
+                        </TableCell>
+                        <TableCell
+                          className="font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ''}
+                          onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || '', 'Phone Number')}
+                        >
+                          {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number || ""}
+                        </TableCell>
+                        <TableCell
+                          className="font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={log.carrier || sub?.carrier || ''}
+                          onClick={() => handleExpand(log.carrier || sub?.carrier || '', 'Carrier')}
+                        >
+                          {log.carrier || sub?.carrier || ''}
+                        </TableCell>
+                        <TableCell
+                          className="text-left font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={formatDate(log.updated_at)}
+                          onClick={() => handleExpand(formatDate(log.updated_at), direction === 'inbound' ? 'Received At' : 'Sent At')}
+                        >
+                          {formatDate(log.updated_at)}
+                        </TableCell>
+                        <TableCell
+                          className="text-left font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                          title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                          onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
+                        >
                           <span>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</span>
+                        </TableCell>
+                        <TableCell
+                          className="text-left font-normal log-cell-ellipsis"
+                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
+                          title={log.error_message || ''}
+                          onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
+                        >
+                          {log.error_message ? (
+                            log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message
+                          ) : ''}
                         </TableCell>
                         {direction !== 'inbound' && (
                           <TableCell className="text-left font-normal">
@@ -524,6 +634,7 @@ export default function Logs() {
           </div>
         </CardContent>
       </Card>
-    </div>
+  <ExpandModal open={!!expandValue} onClose={handleCloseExpand} value={expandValue || ''} label={expandLabel} />
+  </div>
   );
 }

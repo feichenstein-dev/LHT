@@ -13,9 +13,11 @@ export { supabase };
 
 export interface DeliveryLog extends BaseDeliveryLog {
   error_message?: string | null;
+  carrier?: string | null;
 }
 export interface InsertDeliveryLog extends BaseInsertDeliveryLog {
   error_message?: string | null;
+  carrier?: string | null;
 }
 
 export interface IStorage {
@@ -153,6 +155,7 @@ class MemoryStorage implements IStorage {
       name: log.name ?? null,
       phone_number: log.phone_number ?? null,
       error_message: log.error_message ?? null,
+      carrier: log.carrier ?? null,
     };
     this.deliveryLogs.push({ ...newLog, subscriber: null });
     return newLog;
@@ -414,6 +417,7 @@ export class FallbackStorage implements IStorage {
       name: log.name ?? null,
       phone_number: log.phone_number ?? null,
       error_message: log.error_message ?? null,
+      carrier: log.carrier ?? null,
     };
 
     // Log the data being inserted for debugging
@@ -430,6 +434,17 @@ export class FallbackStorage implements IStorage {
       console.error('Supabase error (createDeliveryLog):', error);
       console.error('Failed log data:', JSON.stringify(logEntry, null, 2));
       return undefined;
+    }
+
+    // --- NEW: Update carrier in subscribers table if phone_number and carrier are present ---
+    if (logEntry.phone_number && logEntry.carrier) {
+      const { error: carrierError } = await supabase
+        .from('subscribers')
+        .update({ carrier: logEntry.carrier })
+        .eq('phone_number', logEntry.phone_number);
+      if (carrierError) {
+        console.error('Supabase error (update subscriber carrier):', carrierError);
+      }
     }
 
     console.log('Supabase response for delivery_logs:', JSON.stringify(data, null, 2));
