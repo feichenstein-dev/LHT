@@ -266,10 +266,29 @@ export default function Logs() {
     filteredLogs = filteredLogs.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   }
 
-  const retryMessage = async (messageId: string) => {
-    setRetryingId(messageId);
+  // Retry a message by calling /api/messages with one number and log info
+  const retryMessage = async (log: any) => {
+    setRetryingId(log.id);
     try {
-      const response = await fetch(`/api/retry-message/${messageId}`, { method: 'POST' });
+      // Compose the payload for /api/messages
+      const payload: any = {
+        body: log.message_text,
+        numbers: [log.phone_number],
+        message_id: log.message_id ?? undefined,
+        // Optionally include more info if needed by backend
+        name: log.name ?? undefined,
+        direction: log.direction ?? undefined,
+        telnyx_message_id: log.telnyx_message_id ?? undefined,
+        subscriber_id: log.subscriber_id ?? undefined,
+        from: log.from ?? undefined,
+        messaging_profile_id: log.messaging_profile_id ?? undefined,
+        webhook_url: log.webhook_url ?? undefined,
+      };
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       if (!response.ok) throw new Error('Failed to retry message');
       toast({ title: 'Retry Successful', description: 'The message has been retried successfully.' });
     } catch (error: unknown) {
@@ -415,26 +434,37 @@ export default function Logs() {
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                      {msg.logs.map((log: any) => {
-                                        const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
-                                        return (
-                                          <TableRow key={log.id} className="hover:bg-gray-200">
-                                            <TableCell className="font-normal" style={{ width: '30%' }}>{sub?.name || log.name || "N/A"}</TableCell>
-                                            <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
-                                            <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
-                                            <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
-                                            <TableCell className="text-left font-normal">
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => retryMessage(log.id)}
-                                              >
-                                                {retryingId === log.id ? 'Retrying...' : 'Retry'}
-                                              </Button>
-                                            </TableCell>
-                                          </TableRow>
-                                        );
-                                      })}
+                                      {[...msg.logs]
+                                        .sort((a: any, b: any) => {
+                                          const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
+                                          const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
+                                          const nameA = (subA?.name || a.name || "N/A").toLowerCase();
+                                          const nameB = (subB?.name || b.name || "N/A").toLowerCase();
+                                          if (nameA < nameB) return -1;
+                                          if (nameA > nameB) return 1;
+                                          // If names are equal, sort by sent_at (log.updated_at)
+                                          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+                                        })
+                                        .map((log: any) => {
+                                          const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+                                          return (
+                                            <TableRow key={log.id} className="hover:bg-gray-200">
+                                              <TableCell className="font-normal" style={{ width: '30%' }}>{sub?.name || log.name || "N/A"}</TableCell>
+                                              <TableCell className="font-normal">{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
+                                              <TableCell className="text-left font-normal">{formatDate(log.updated_at)}</TableCell>
+                                              <TableCell className="text-left font-normal">{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
+                                              <TableCell className="text-left font-normal">
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() => retryMessage(log)}
+                                                >
+                                                  {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                                                </Button>
+                                              </TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
                                     </TableBody>
                                   </Table>
                                 </div>
@@ -479,7 +509,7 @@ export default function Logs() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => retryMessage(log.id)}
+                              onClick={() => retryMessage(log)}
                             >
                               {retryingId === log.id ? 'Retrying...' : 'Retry'}
                             </Button>

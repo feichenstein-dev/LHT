@@ -132,36 +132,6 @@ async function sendMessageAndLog({
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Retry message endpoint
-  app.post("/api/retry-message", async (req, res) => {
-    try {
-      const { message_id, phone_number } = req.body;
-      if (!message_id || !phone_number) {
-        return res.status(400).json({ message: "Missing message_id or phone_number" });
-      }
-      // Fetch the message body from storage
-      const message = await storage.getMessageById(message_id);
-      if (!message) {
-        return res.status(404).json({ message: "Message not found" });
-      }
-      const result = await sendMessageAndLog({
-        to: phone_number,
-        text: message.body,
-        message_id,
-        name: null,
-        direction: 'outbound',
-        storage,
-      });
-      if (result.success) {
-        res.json({ success: true });
-      } else {
-        res.status(result.status === 'invalid' ? 400 : 500).json({ message: result.error || 'Failed to retry message' });
-      }
-    } catch (error) {
-      console.error("Error retrying message:", error);
-      res.status(500).json({ message: "Failed to retry message" });
-    }
-  });
   // Messages endpoints
   app.get("/api/messages", async (req, res) => {
     try {
@@ -186,13 +156,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('Failed to create message');
       }
       const messageId = message.id;
-      const activeSubscribers = await storage.getActiveSubscribers();
-      if (!activeSubscribers || activeSubscribers.length === 0) {
-        throw new Error('No active subscribers found');
-      }
-      // Adjusting the Telnyx API call to match MessagesCreateParams
 
-      const deliveryPromises = activeSubscribers.map(async (subscriber) => {
+      // Accept numbers (single or array) in the request body
+      let numbers: string[] = [];
+      if (Array.isArray(req.body.numbers)) {
+        numbers = req.body.numbers;
+      } else if (typeof req.body.numbers === 'string') {
+        numbers = [req.body.numbers];
+      }
+
+      let recipients = [];
+      if (numbers.length > 0) {
+        // If numbers provided, fetch subscribers by those numbers (if possible)
+        recipients = await Promise.all(numbers.map(async (num) => {
+          const sub = await storage.getSubscriberByPhone(num);
+          return sub || { phone_number: num, name: null, id: null };
+        }));
+      } else {
+        // Default: all active subscribers
+        recipients = await storage.getActiveSubscribers();
+      }
+
+      if (!recipients || recipients.length === 0) {
+        throw new Error('No recipients found');
+      }
+
+      const deliveryPromises = recipients.map(async (subscriber) => {
         const result = await sendMessageAndLog({
           to: subscriber.phone_number,
           text: message.body,
@@ -230,14 +219,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storageModule.supabase
         .from('delivery_logs')
         .insert({
-          total_subscribers: activeSubscribers.length,
+          total_subscribers: recipients.length,
           sent_count: successCount,
           timestamp: new Date().toISOString(),
         });
       res.json({
         message,
         delivery: {
-          total: activeSubscribers.length,
+          total: recipients.length,
           sent: successCount,
           failed: failedCount,
           results,
@@ -613,43 +602,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
             }
 
-            // Update the original delivery log row (status 'sent') to the final status
-            // Try to match by phone_number and message_text, and status 'sent'
-            // If you have message_id or telnyx_message_id, you can use those as well
-            console.log('[BACKEND] Attempting to update delivery log for phone:', phone_number, '| message_text:', text);
-            console.log('[BACKEND] Writing status:', status, '| Error:', combinedError);
-            const { error: updateError } = await storageModule.supabase
-                .from('delivery_logs')
-                .update({
-                    status,
-                    telnyx_message_id: telnyxMessageId,
-                    error_message: combinedError
-                })
-                .match({
-                    phone_number,
-                    message_text: text,
-                    status: 'sent',
-                    direction: 'outbound'
-                });
+      // Update the original delivery log row (status 'sent') to the final status
+      // Try to match by phone_number and message_text, and status 'sent'
+      // If you have message_id or telnyx_message_id, you can use those as well
+      console.log('[WEBHOOK DEBUG] phone_number:', phone_number);
+      console.log('[WEBHOOK DEBUG] message_text:', text);
+      console.log('[WEBHOOK DEBUG] status to write:', status);
+      console.log('[WEBHOOK DEBUG] telnyx_message_id:', telnyxMessageId);
+      console.log('[WEBHOOK DEBUG] error_message:', combinedError);
+      console.log('[WEBHOOK DEBUG] direction: outbound');
+      const { error: updateError, data: updateData } = await storageModule.supabase
+        .from('delivery_logs')
+        .update({
+          status,
+          telnyx_message_id: telnyxMessageId,
+          error_message: combinedError
+        })
+        .match({
+          phone_number,
+          message_text: text,
+          status: 'sent',
+          direction: 'outbound'
+        });
+      console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
 
-            if (updateError) {
-                console.error('[BACKEND] Failed to update delivery log status:', updateError);
-                // Optionally, fall back to inserting a new log if update fails
-                await storage.createDeliveryLog({
-                    message_id: null, // If you have message_id, pass it here
-                    subscriber_id: subscriber ? subscriber.id : null,
-                    status,
-                    telnyx_message_id: telnyxMessageId,
-                    direction: "outbound",
-                    message_text: text,
-                    name,
-                    phone_number,
-                    error_message: combinedError
-                });
-                console.log('[BACKEND] Inserted new delivery log due to update failure.');
-            } else {
-                console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
-            }
+      if (updateError) {
+        console.error('[BACKEND] Failed to update delivery log status:', updateError);
+        // Optionally, fall back to inserting a new log if update fails
+        await storage.createDeliveryLog({
+          message_id: null, // If you have message_id, pass it here
+          subscriber_id: subscriber ? subscriber.id : null,
+          status,
+          telnyx_message_id: telnyxMessageId,
+          direction: "outbound",
+          message_text: text,
+          name,
+          phone_number,
+          error_message: combinedError
+        });
+        console.log('[BACKEND] Inserted new delivery log due to update failure.');
+      } else {
+        console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
+      }
         }
 
         if (data && data.event_type === "message.received") {
