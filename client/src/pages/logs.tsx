@@ -411,7 +411,7 @@ export default function Logs() {
             {isLoading ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : direction === 'lht' ? (
-              <Table className="w-full" style={{ tableLayout: 'fixed', whiteSpace: 'nowrap' }}>
+              <Table className="w-full" style={{ tableLayout: 'auto' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '14%' }}>Message</TableHead>
