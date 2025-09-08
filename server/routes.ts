@@ -120,9 +120,18 @@ async function sendMessageAndLog({
   // Attempt to extract carrier from Telnyx API response if available
   let carrier = null;
   if (telnyxResponse && telnyxResponse.data && telnyxResponse.data.to && Array.isArray(telnyxResponse.data.to) && telnyxResponse.data.to.length > 0) {
-    const actualCarrier = telnyxResponse.data.to[0].carrier || '';
-    const normalizedCarrier = actualCarrier ? actualCarrier.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-    carrier = normalizedCarrier && actualCarrier ? `${normalizedCarrier} | ${actualCarrier}` : actualCarrier || null;
+    // Use both the 'from.carrier' (e.g. Verizon Wireless) and 'to[0].carrier' (e.g. CELLCO PARTNERSHIP DBA VERIZON WIRELESS - NY)
+    const fromCarrier = telnyxResponse.data.from && telnyxResponse.data.from.carrier ? telnyxResponse.data.from.carrier : '';
+    const toCarrier = telnyxResponse.data.to[0].carrier || '';
+    if (fromCarrier && toCarrier && fromCarrier !== toCarrier) {
+      carrier = `${fromCarrier} | ${toCarrier}`;
+    } else if (toCarrier) {
+      carrier = toCarrier;
+    } else if (fromCarrier) {
+      carrier = fromCarrier;
+    } else {
+      carrier = null;
+    }
   }
   await storage.createDeliveryLog({
     message_id: message_id ?? undefined,
@@ -535,18 +544,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let name = null;
         let carrier = null;
 
-        // If 'to' is an array, use the first element's status, phone_number, and carrier
-        if (Array.isArray(to) && to.length > 0) {
-          status = to[0].status || "sent";
-          phone_number = to[0].phone_number || "";
-          const actualCarrier = to[0].carrier || '';
-          const normalizedCarrier = actualCarrier ? actualCarrier.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-          carrier = normalizedCarrier && actualCarrier ? `${normalizedCarrier} | ${actualCarrier}` : actualCarrier || null;
-        } else if (typeof to === "string") {
-          phone_number = to;
-        } else if (to && typeof to.phone_number === "string") {
-          phone_number = to.phone_number;
-        }
+                // If 'to' is an array, use the first element's status, phone_number, and carrier
+                if (Array.isArray(to) && to.length > 0) {
+                    status = to[0].status || "sent";
+                    phone_number = to[0].phone_number || "";
+                    // Use both the 'from.carrier' (e.g. Verizon Wireless) and 'to[0].carrier' (e.g. CELLCO PARTNERSHIP DBA VERIZON WIRELESS - NY)
+                    const fromCarrier = data.payload.from && data.payload.from.carrier ? data.payload.from.carrier : '';
+                    const toCarrier = to[0].carrier || '';
+                    if (fromCarrier && toCarrier && fromCarrier !== toCarrier) {
+                      carrier = `${fromCarrier} | ${toCarrier}`;
+                    } else if (toCarrier) {
+                      carrier = toCarrier;
+                    } else if (fromCarrier) {
+                      carrier = fromCarrier;
+                    } else {
+                      carrier = null;
+                    }
+                } else if (typeof to === "string") {
+                    phone_number = to;
+                } else if (to && typeof to.phone_number === "string") {
+                    phone_number = to.phone_number;
+                }
 
         if (from && typeof from.name === "string") {
           name = from.name;
