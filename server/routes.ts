@@ -150,10 +150,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/messages", async (req, res) => {
     try {
-      let message;
-      let messageId;
+      let message = null;
+      let messageId = null;
       let isRetry = false;
-      // If message_id is provided (e.g. for retry), fetch the message, else create new
+      // Only create a message and assign message_id if this is an LHT message send from the message page (req.body.IsLHMessage === true)
       if (req.body.message_id) {
         isRetry = true;
         console.log('[DEBUG] Incoming message_id for retry:', req.body.message_id, '| type:', typeof req.body.message_id);
@@ -163,13 +163,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error('Message not found for provided message_id');
         }
         messageId = message.id;
-      } else {
+      } else if (req.body.IsLHMessage === true) {
+        // Explicit LHT message send from messages page
         const messageData = insertMessageSchema.parse(req.body);
         message = await storage.createMessage(messageData);
         if (!message) {
           throw new Error('Failed to create message');
         }
         messageId = message.id;
+      } else {
+        // For all other cases (single send, retry, etc.), do not create a message or assign messageId
+        message = null;
+        messageId = null;
       }
 
       // Accept numbers (single or array) in the request body
@@ -199,7 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveryPromises = recipients.map(async (subscriber) => {
         const result = await sendMessageAndLog({
           to: subscriber.phone_number,
-          text: message.body,
+          text: message ? message.body : req.body.body,
           message_id: messageId,
           name: subscriber.name ?? null,
           direction: 'outbound',
@@ -216,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const successCount = results.filter((r) => r.success).length;
       const failedCount = results.filter((r) => !r.success).length;
 
-      // Only update delivered_count if not a retry (do not log retry messages to messages table)
+      // Only update delivered_count if not a retry and message exists (i.e., bulk send from message page)
       if (!isRetry && message) {
         console.log(`Updating delivered_count for message ID ${messageId} with successCount: ${successCount}`);
         const { error: updateError } = await storageModule.supabase

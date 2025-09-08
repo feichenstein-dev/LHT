@@ -68,7 +68,8 @@ export default function Messages() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (body: string) => {
-      const response = await apiRequest("POST", "/api/messages", { body });
+      // Send IsLHMessage: true to backend for LHT message creation
+      const response = await apiRequest("POST", "/api/messages", { body, IsLHMessage: true });
       return response.json();
     },
     onSuccess: async (data) => {
