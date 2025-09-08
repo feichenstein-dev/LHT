@@ -152,8 +152,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let message;
       let messageId;
+      let isRetry = false;
       // If message_id is provided (e.g. for retry), fetch the message, else create new
       if (req.body.message_id) {
+        isRetry = true;
         console.log('[DEBUG] Incoming message_id for retry:', req.body.message_id, '| type:', typeof req.body.message_id);
         message = await storage.getMessageById(req.body.message_id);
         console.log('[DEBUG] getMessageById result:', message);
@@ -214,8 +216,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const successCount = results.filter((r) => r.success).length;
       const failedCount = results.filter((r) => !r.success).length;
 
-      // Update the delivered_count field in the messages table
-      if (message) {
+      // Only update delivered_count if not a retry (do not log retry messages to messages table)
+      if (!isRetry && message) {
         console.log(`Updating delivered_count for message ID ${messageId} with successCount: ${successCount}`);
         const { error: updateError } = await storageModule.supabase
           .from('messages')
