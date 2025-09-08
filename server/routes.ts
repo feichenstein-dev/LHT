@@ -78,7 +78,7 @@ async function sendMessageAndLog({
       messaging_profile_id: profileId || undefined,
     });
     // Log the full Telnyx API response for debugging
-    console.log('[sendMessageAndLog] Telnyx API response:', JSON.stringify(telnyxResponse, null, 2));
+    console.log('[sendMessageAndLog] FULL Telnyx API response:', JSON.stringify(telnyxResponse, null, 2));
 
     if (telnyxResponse.data && telnyxResponse.data.errors && telnyxResponse.data.errors.length > 0) {
       error_message = telnyxResponse.data.errors.map((e) => e.detail || e.title || JSON.stringify(e)).join('; ');
@@ -503,13 +503,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Telnyx webhook endpoint for delivery status updates
   app.post("/api/webhooks/telnyx", async (req, res) => {
     try {
-      // TOP-LEVEL DEBUG: Log every incoming webhook request, regardless of structure
-      console.log('========== Telnyx Webhook: RAW REQUEST ==========');
-      try {
-        console.log('[WEBHOOK DEBUG] req.body:', JSON.stringify(req.body));
-      } catch (e) {
-        console.log('[WEBHOOK DEBUG] req.body (unstringifiable):', req.body);
-      }
+        // TOP-LEVEL DEBUG: Log every incoming webhook request, regardless of structure
+        console.log('========== Telnyx Webhook: RAW REQUEST ==========');
+        try {
+          console.log('[WEBHOOK DEBUG] FULL req.body:', JSON.stringify(req.body, null, 2));
+        } catch (e) {
+          console.log('[WEBHOOK DEBUG] req.body (unstringifiable):', req.body);
+        }
       const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
       const apiKey = process.env.TELNYX_API_KEY;
       const { data } = req.body;
