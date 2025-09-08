@@ -474,7 +474,7 @@ export default function Logs() {
                               <div className="w-full flex justify-center" style={{ width: '100%' }}>
                                 <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '100%' }}>
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
-                                  <p className="text-sm mb-4"><strong>Full Message:</strong> {msg.message_text}</p>
+                                  <div className="text-sm mb-4"><strong>Full Message:</strong> <pre style={{whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0}}>{msg.message_text}</pre></div>
                                   <p className="text-sm mb-4">
                                       <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[F]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
                                   </p>

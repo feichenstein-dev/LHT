@@ -294,22 +294,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Lookup carrier info using Telnyx Number Lookup API
       let carrier = null;
+      let lookup = null;
       try {
         const apiKey = process.env.TELNYX_API_KEY;
         if (apiKey) {
           const telnyx = require('telnyx')(apiKey);
-          const lookup = await telnyx.numberLookup.lookup(subscriberData.phone_number);
+          lookup = await telnyx.numberLookup.lookup(subscriberData.phone_number);
           console.log('[Telnyx Number Lookup] Full response:', JSON.stringify(lookup, null, 2));
           const fromCarrier = lookup.data.carrier && lookup.data.carrier.name ? lookup.data.carrier.name : '';
           const toCarrier = lookup.data.carrier && lookup.data.carrier.full_name ? lookup.data.carrier.full_name : '';
           if (fromCarrier && toCarrier && fromCarrier !== toCarrier) {
             carrier = `${fromCarrier} | ${toCarrier}`;
+            console.log('[Carrier Selection] Using both fromCarrier and toCarrier:', carrier, '\nRaw:', JSON.stringify({fromCarrier, toCarrier, lookup}, null, 2));
           } else if (toCarrier) {
             carrier = toCarrier;
+            console.log('[Carrier Selection] Using toCarrier:', carrier, '\nRaw:', JSON.stringify({toCarrier, lookup}, null, 2));
           } else if (fromCarrier) {
             carrier = fromCarrier;
+            console.log('[Carrier Selection] Using fromCarrier:', carrier, '\nRaw:', JSON.stringify({fromCarrier, lookup}, null, 2));
           } else {
             carrier = null;
+            console.log('[Carrier Selection] No carrier found, setting to null. Raw:', JSON.stringify({lookup}, null, 2));
           }
         }
       } catch (e) {
@@ -331,8 +336,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: "Failed to update subscriber" });
         }
         subscriber = data;
+        console.log('[Carrier Update] Reactivated subscriber carrier set to:', carrier, '\nRaw:', JSON.stringify({lookup, carrier}, null, 2));
       } else {
         subscriber = await storage.createSubscriber({ ...subscriberData, carrier });
+        console.log('[Carrier Insert] New subscriber carrier set to:', carrier, '\nRaw:', JSON.stringify({lookup, carrier}, null, 2));
       }
 
       // Send welcome text if possible
