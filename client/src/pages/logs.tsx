@@ -474,7 +474,9 @@ export default function Logs() {
                               <div className="w-full flex justify-center" style={{ width: '100%' }}>
                                 <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '100%' }}>
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
-                                  <div className="text-sm mb-4"><strong>Full Message:</strong> <pre style={{whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0}}>{msg.message_text}</pre></div>
+                                  <div className="text-sm mb-4">
+                                    <strong>Full Message: </strong>{msg.message_text}
+                                  </div>
                                   <p className="text-sm mb-4">
                                       <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[F]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
                                   </p>
@@ -507,15 +509,53 @@ export default function Logs() {
                                           const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
                                           return (
                                             <TableRow key={log.id} className="hover:bg-gray-200">
-                                              <TableCell className="font-normal" style={{ width: '30%', cursor: 'pointer' }} onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')} title={sub?.name || log.name || 'N/A'}>{sub?.name || log.name || "N/A"}</TableCell>
-                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')} title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}>{formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}</TableCell>
-                                              <TableCell className="font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')} title={getCarrier(log, sub)}>{getCarrier(log, sub)}</TableCell>
-                                              <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')} title={formatDate(log.updated_at)}>{formatDate(log.updated_at)}</TableCell>
-                                              <TableCell className="text-left font-normal" style={{ cursor: 'pointer' }} onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')} title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}>{log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ""}</TableCell>
-                                              <TableCell className="text-left font-normal" style={{ cursor: log.error_message ? 'pointer' : undefined }} onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')} title={log.error_message || ''}>
-                                                {log.error_message ? (
-                                                  log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message
-                                                ) : ''}
+                                              <TableCell
+                                                className="font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                                                onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
+                                                title={sub?.name || log.name || 'N/A'}
+                                              >
+                                                {sub?.name || log.name || 'N/A'}
+                                              </TableCell>
+                                              <TableCell
+                                                className="font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                                                onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
+                                                title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                                              >
+                                                {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                                              </TableCell>
+                                              <TableCell
+                                                className="font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                                                onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
+                                                title={getCarrier(log, sub)}
+                                              >
+                                                {getCarrier(log, sub)}
+                                              </TableCell>
+                                              <TableCell
+                                                className="text-left font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                                                onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
+                                                title={formatDate(log.updated_at)}
+                                              >
+                                                {formatDate(log.updated_at)}
+                                              </TableCell>
+                                              <TableCell
+                                                className="text-left font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                                                onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
+                                                title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                                              >
+                                                {log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                                              </TableCell>
+                                              <TableCell
+                                                className="text-left font-normal log-cell-ellipsis"
+                                                style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
+                                                onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
+                                                title={log.error_message || ''}
+                                              >
+                                                {log.error_message ? (log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message) : ''}
                                               </TableCell>
                                               <TableCell className="text-left font-normal">
                                                 <Button
