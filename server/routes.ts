@@ -273,7 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Subscribers endpoints
   app.get("/api/subscribers", async (req, res) => {
     try {
-      let subscribers = await storage.getSubscribers();
+      let subscribers = await storage.getSubscribers() as Array<{ id: string; name: string | null; phone_number: string; joined_at: Date | null; status: string | null; carrier?: string }>;
       // For each subscriber, update their carrier by making a carrier lookup call
       const apiKey = process.env.TELNYX_API_KEY;
       if (apiKey) {
