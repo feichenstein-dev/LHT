@@ -604,13 +604,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           !telnyxMessageId ||
           (updateResult && Array.isArray(updateResult.data) && (updateResult.data as any[]).length === 0)
         ) {
+          // Fetch the original delivery log to get the initial carrier
+          let initialCarrier = null;
+          try {
+            const { data: origLogs } = await storageModule.supabase
+              .from('delivery_logs')
+              .select('carrier')
+              .match({
+                phone_number,
+                message_text: text,
+                direction: 'outbound'
+              });
+            if (Array.isArray(origLogs) && origLogs.length > 0) {
+              initialCarrier = origLogs[0].carrier || null;
+            }
+          } catch (err) {
+            console.error('[WEBHOOK DEBUG] Failed to fetch initial carrier:', err);
+          }
+          // Concatenate carrier from webhook and initial response if both exist
+          let combinedCarrier = carrier;
+          if (initialCarrier && carrier && initialCarrier !== carrier) {
+            combinedCarrier = `${initialCarrier} | ${carrier}`;
+          } else if (initialCarrier) {
+            combinedCarrier = initialCarrier;
+          }
           updateResult = await storageModule.supabase
             .from('delivery_logs')
             .update({
               status,
               telnyx_message_id: telnyxMessageId,
               error_message: combinedError,
-              carrier,
+              carrier: combinedCarrier,
             })
             .match({
               phone_number,
@@ -659,15 +683,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let subscriber = await storage.getSubscriberByPhone(from);
 
         // Always log the inbound message ONCE, before any keyword logic
-        await storage.createDeliveryLog({
-          message_id: null,
-          subscriber_id: subscriber ? subscriber.id : null,
-          status: "received",
-          direction: "inbound",
-          message_text: text,
-          name: subscriber ? subscriber.name : null,
-          phone_number: from,
-        });
+        try {
+          const logResult = await storage.createDeliveryLog({
+            message_id: null,
+            subscriber_id: subscriber ? subscriber.id : null,
+            status: "received",
+            direction: "inbound",
+            message_text: text,
+            name: subscriber ? subscriber.name : null,
+            phone_number: from,
+          });
+          console.log('[BACKEND] Inbound delivery log created:', logResult);
+        } catch (err) {
+          console.error('[BACKEND] Failed to create inbound delivery log:', err);
+        }
 
         // JOIN keyword logic
         if (joinMatch) {
