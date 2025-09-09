@@ -82,6 +82,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
       setSubscriberName("");
+      window.location.reload();
     },
   });
 
@@ -91,6 +92,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      window.location.reload();
     },
   });
 
@@ -102,6 +104,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      window.location.reload();
     },
   });
 
@@ -114,6 +117,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setEditingSubscriber(null);
       setEditingName("");
+      window.location.reload();
     },
   });
 

@@ -83,6 +83,10 @@ export default function Messages() {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
       }, 0);
+      // Refresh the page after sending a message
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
     },
     onError: (error: any) => {
       logMessageStatus(null, "Error", error);

@@ -320,6 +320,7 @@ export default function Logs() {
       });
       if (!response.ok) throw new Error('Failed to retry message');
       toast({ title: 'Retry Successful', description: 'The message has been retried successfully.' });
+      window.location.reload();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({ title: 'Retry Failed', description: errorMessage, variant: 'destructive' });
