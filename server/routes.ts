@@ -645,10 +645,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const {
           id: telnyxMessageId,
           to,
-          delivery_status,
           text,
           from
         } = data.payload;
+
+        // delivery_status comes from the to[0].status if available, else 'unknown'
+        let delivery_status = 'unknown';
+        if (Array.isArray(to) && to.length > 0 && typeof to[0] === 'object' && 'status' in to[0]) {
+          delivery_status = to[0].status;
+        }
 
         let phone_number = "";
         let name = null;
@@ -689,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Log delivery status updates for messages sent from your Telnyx number
         if (typeof from === 'string' && from === telnyxNumber) {
-          console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', status);
+          console.log('[BACKEND] Telnyx delivery status update for message sent from your number:', telnyxNumber, 'to', phone_number, '| Status:', delivery_status);
         }
 
         // Update the original delivery log row (status 'sent') to the final status
