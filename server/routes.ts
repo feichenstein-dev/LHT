@@ -650,19 +650,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           from
         } = data.payload;
 
-        let status = "sent";
-        switch (delivery_status) {
-          case "delivered":
-            status = "delivered";
-            break;
-          case "failed":
-          case "undelivered":
-            status = "failed";
-            break;
-          default:
-            status = "sent";
-        }
-
         let phone_number = "";
         let name = null;
 
@@ -709,7 +696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Try to match by phone_number, message_text, direction 'outbound', and status 'sent'
         console.log('[WEBHOOK DEBUG] phone_number:', phone_number);
         console.log('[WEBHOOK DEBUG] message_text:', text);
-        console.log('[WEBHOOK DEBUG] status to write:', status);
+        console.log('[WEBHOOK DEBUG] status to write:', delivery_status);
         console.log('[WEBHOOK DEBUG] telnyx_message_id:', telnyxMessageId);
         console.log('[WEBHOOK DEBUG] error_message:', combinedError);
         console.log('[WEBHOOK DEBUG] direction: outbound');
@@ -733,7 +720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { error: updateError, data: updateData } = await storageModule.supabase
               .from('delivery_logs')
               .update({
-                status, // always set to the FINAL webhook status
+                delivery_status: delivery_status, // always set to the FINAL webhook status
                 error_message: combinedError,
                 updated_at: new Date().toISOString()
               })
@@ -742,7 +729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (updateError) {
               console.error('[BACKEND] Failed to update delivery log status:', updateError);
             } else {
-              console.log('[BACKEND] Successfully updated delivery log with status:', status, '| Error:', combinedError);
+              console.log('[BACKEND] Successfully updated delivery log with status:', delivery_status, '| Error:', combinedError);
             }
           }
         } else {
@@ -751,7 +738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createDeliveryLog({
             message_id: null,
             subscriber_id: subscriber ? subscriber.id : null,
-            status,
+            status: delivery_status,
             telnyx_message_id: telnyxMessageId,
             direction: "outbound",
             message_text: text,
