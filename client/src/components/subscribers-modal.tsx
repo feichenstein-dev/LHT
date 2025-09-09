@@ -123,6 +123,10 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       window.alert("Please enter a valid phone number");
       return;
     }
+    // Sanitize subscriber name: remove non-alpha chars from start/end, keep internal whitespace
+    const sanitizedName = subscriberName
+      .replace(/^[^A-Za-z]+/, '')
+      .replace(/[^A-Za-z]+$/, '');
     let formatted = phoneNumber.replace(/\D/g, '');
     if (formatted.length === 10) {
       formatted = '+1' + formatted;
@@ -131,7 +135,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     } else if (!formatted.startsWith('+')) {
       formatted = '+' + formatted;
     }
-    addSubscriberMutation.mutate({ phone: formatted, name: subscriberName.trim() });
+    addSubscriberMutation.mutate({ phone: formatted, name: sanitizedName });
   };
 
   const handleRemoveSubscriber = (id: string) => {

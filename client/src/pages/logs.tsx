@@ -353,7 +353,7 @@ export default function Logs() {
                   persist('logs_selected', 'all');
                 }}
               >
-                <SelectTrigger className="min-w-[300px] w-auto h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
                 <SelectContent className="min-w-[220px] w-auto">
@@ -365,11 +365,11 @@ export default function Logs() {
             </div>
       <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4 min-w-[300px]">
+        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
         <SelectContent className="w-full">
-                  <SelectItem value="all" className="w-[30%]">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
+                  <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
                   {dropdownOptions.map((opt, idx) => (
                     <SelectItem key={idx} value={opt.value} className="w-full truncate" title={opt.label}>
                       <span className="text-sm font-medium text-gray-700">{opt.label}</span>

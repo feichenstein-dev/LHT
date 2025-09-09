@@ -12,12 +12,12 @@ import NotFound from "@/pages/not-found";
 import { MessageCircle, List } from "lucide-react";
 import Login from "@/pages/login";
 
-function Navigation() {
+function Navigation({ onLogout }: { onLogout: () => void }) {
   // Use location for active tab highlight
   const [location] = useLocation();
   const handleLogout = () => {
     localStorage.removeItem("authenticated");
-    window.location.reload();
+    onLogout();
   };
   return (
     <header className="bg-card border-b border-border sticky top-0 z-20">
@@ -77,13 +77,13 @@ function Navigation() {
   );
 }
 
-function Router() {
+function Router({ onLogout }: { onLogout: () => void }) {
   return (
     <div
       className="h-screen bg-background flex flex-col overflow-hidden"
       style={{ overscrollBehavior: 'none', touchAction: 'none' }}
     >
-      <Navigation />
+      <Navigation onLogout={onLogout} />
       <main className="flex-1 flex flex-col min-h-0">
         <Switch>
           <Route path="/" component={Messages} />
@@ -107,14 +107,18 @@ function App() {
     localStorage.setItem("authenticated", "true"); // Persist authentication state
   };
 
-  if (!authenticated) {
-    return <Login onSuccess={handleLoginSuccess} />;
-  }
+  const handleLogout = () => {
+    setAuthenticated(false);
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Router />
+        {!authenticated ? (
+          <Login onSuccess={handleLoginSuccess} />
+        ) : (
+          <Router onLogout={handleLogout} />
+        )}
       </TooltipProvider>
     </QueryClientProvider>
   );
