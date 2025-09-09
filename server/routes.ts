@@ -74,7 +74,7 @@ async function sendMessageAndLog({
     text,
     webhook_url: webhookUrl,
     use_profile_webhooks: false,
-    auto_detect: true,
+    auto_detect: false,
     messaging_profile_id: profileId,
   };
   // Remove undefined fields (if any)
