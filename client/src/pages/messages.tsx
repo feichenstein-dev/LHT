@@ -77,6 +77,12 @@ export default function Messages() {
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
       logMessageStatus(data.id, "Success", data);
+      // Scroll to bottom after sending a message
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 0);
     },
     onError: (error: any) => {
       logMessageStatus(null, "Error", error);
