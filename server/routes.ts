@@ -725,7 +725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { error: updateError, data: updateData } = await storageModule.supabase
               .from('delivery_logs')
               .update({
-                delivery_status: delivery_status, // always set to the FINAL webhook status
+                status: delivery_status, // always set to the FINAL webhook status
                 error_message: combinedError,
                 updated_at: new Date().toISOString()
               })
