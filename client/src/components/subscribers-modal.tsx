@@ -82,7 +82,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
       setSubscriberName("");
-      window.location.reload();
+      // No full window reload; modal will refresh via query
     },
   });
 
@@ -92,7 +92,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      window.location.reload();
+      // No full window reload; modal will refresh via query
     },
   });
 
@@ -104,7 +104,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      window.location.reload();
+      // No full window reload; modal will refresh via query
     },
   });
 
@@ -117,7 +117,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setEditingSubscriber(null);
       setEditingName("");
-      window.location.reload();
+      // No full window reload; modal will refresh via query
     },
   });
 

@@ -6,8 +6,10 @@ const calculateMessageLength = (message: string): number => {
   return isHebrew ? message.length * 2 : message.length;
 };
 
+import { ReactNode } from "react";
+
 interface MessageBubbleProps {
-  message: string;
+  message: ReactNode;
   timestamp: string;
   deliveryInfo?: {
     count: number;
@@ -28,7 +30,8 @@ export function MessageBubble({
   deliveredCount, // Added deliveredCount prop
   className 
 }: MessageBubbleProps) {
-  const messageLength = calculateMessageLength(message);
+  const messageString = typeof message === 'string' ? message : '';
+  const messageLength = calculateMessageLength(messageString);
 
   console.debug('MessageBubble Active Count:', activeCount, 'Delivered Count:', deliveredCount);
 

@@ -27,14 +27,14 @@ function Navigation({ onLogout }: { onLogout: () => void }) {
           Sefer Chofetz Chaim Texts
         </h1>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
             className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-4 py-1 text-xs font-semibold shadow"
-            style={{ minWidth: 70 }}
-          >
-            Refresh
-          </button>
+          style={{ minWidth: 70 }}
+        >
+          Refresh
+        </button>
           <button
             type="button"
             onClick={handleLogout}

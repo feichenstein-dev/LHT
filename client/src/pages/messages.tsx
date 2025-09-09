@@ -83,9 +83,11 @@ export default function Messages() {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
       }, 0);
-      // Refresh the page after sending a message
+      // Instead of full reload, just refresh data
       setTimeout(() => {
-        window.location.reload();
+        queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       }, 300);
     },
     onError: (error: any) => {
@@ -181,7 +183,7 @@ export default function Messages() {
                 {messages.map((message) => (
                   <MessageBubble
                     key={message.id}
-                    message={message.body}
+                    message={<span style={{ whiteSpace: 'pre-wrap' }}>{message.body}</span>}
                     timestamp={
                       message.sent_at
                         ? new Date(message.sent_at).toLocaleString(undefined, {

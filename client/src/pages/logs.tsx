@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 // Simple modal for tap-to-expand (must be inside Logs for state)
 function ExpandModal({ open, onClose, value, label }: { open: boolean, onClose: () => void, value: string, label?: string }) {
   if (!open) return null;
@@ -12,7 +12,6 @@ function ExpandModal({ open, onClose, value, label }: { open: boolean, onClose: 
     </div>
   );
 }
-import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -32,6 +31,118 @@ function formatDate(dateStr: string) {
   return date.toLocaleString(undefined, {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true
   });
+}
+
+function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions, retryingId, retryMessage, formatPhoneNumber, formatDate, getCarrier, handleExpand }: { isOpen: boolean; onClose: () => void; details: any; subscribersData: any; statusOptions: string[]; retryingId: string | null; retryMessage: (log: any) => void; formatPhoneNumber: any; formatDate: any; getCarrier: any; handleExpand: any; }) {
+  if (!isOpen || !details) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-lg p-6 max-w-6xl w-[92vw] relative" onClick={e => e.stopPropagation()}>
+        <button className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold" onClick={onClose} aria-label="Close">&times;</button>
+        <h3 className="text-lg font-semibold mb-4">Delivery Details</h3>
+        <div className="text-sm mb-4">
+          <strong>Full Message: </strong>
+          {details.message_text.includes('\n') && <><br /><br /></>}
+          <span style={{ whiteSpace: 'pre-wrap' }}>{details.message_text}</span>
+        </div>
+        <p className="text-sm mb-4">
+          <strong>Character Count:</strong> {details.message_text ? `${details.message_text.length}/${/[\u000fF]/.test(details.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
+        </p>
+        <p className="text-sm mb-4"><strong>Sent To:</strong> {`${details.delivered_count || 0} delivered / ${details.current_active_subscribers || 0} active subscribers`}</p>
+        <div style={{ maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto' }}>
+          <Table className="w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }}>Name</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Phone Number</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }}>Carrier</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Sent At</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Status</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }}>Error Message</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[...(details.logs || [])]
+                .sort((a: any, b: any) => {
+                  const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
+                  const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
+                  const nameA = (subA?.name || a.name || "N/A").toLowerCase();
+                  const nameB = (subB?.name || b.name || "N/A").toLowerCase();
+                  if (nameA < nameB) return -1;
+                  if (nameA > nameB) return 1;
+                  return 0;
+                })
+                .map((log: any) => {
+                  const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+                  return (
+                    <TableRow key={log.id} className="hover:bg-gray-200">
+                      <TableCell
+                        className="font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
+                        title={sub?.name || log.name || 'N/A'}
+                      >
+                        {sub?.name || log.name || 'N/A'}
+                      </TableCell>
+                      <TableCell
+                        className="font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
+                        title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                      >
+                        {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                      </TableCell>
+                      <TableCell
+                        className="font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
+                        title={getCarrier(log, sub)}
+                      >
+                        {getCarrier(log, sub)}
+                      </TableCell>
+                      <TableCell
+                        className="text-left font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
+                        title={formatDate(log.updated_at)}
+                      >
+                        {formatDate(log.updated_at)}
+                      </TableCell>
+                      <TableCell
+                        className="text-left font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
+                        title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                      >
+                        {log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                      </TableCell>
+                      <TableCell
+                        className="text-left font-normal log-cell-ellipsis"
+                        style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
+                        onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
+                        title={log.error_message || ''}
+                      >
+                        {log.error_message ? (log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message) : ''}
+                      </TableCell>
+                      <TableCell className="text-left font-normal">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => retryMessage(log)}
+                        >
+                          {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Logs() {
@@ -127,6 +238,17 @@ export default function Logs() {
   const [expandedMsgId, setExpandedMsgId] = useState<string|null>(null);
   const { toast } = useToast ? useToast() : { toast: () => {} };
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [detailsModalMsg, setDetailsModalMsg] = useState<any>(null);
+
+  const openDetailsModal = (msg: any) => {
+    setDetailsModalMsg(msg);
+    setDetailsModalOpen(true);
+  };
+  const closeDetailsModal = () => {
+    setDetailsModalOpen(false);
+    setDetailsModalMsg(null);
+  };
 
   // Persist dropdowns
   const persist = (key: string, value: string) => {
@@ -320,7 +442,10 @@ export default function Logs() {
       });
       if (!response.ok) throw new Error('Failed to retry message');
       toast({ title: 'Retry Successful', description: 'The message has been retried successfully.' });
-      window.location.reload();
+      // Instead of full reload, just refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       toast({ title: 'Retry Failed', description: errorMessage, variant: 'destructive' });
@@ -337,7 +462,7 @@ export default function Logs() {
   }
 
   return (
-  <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2 logs-disable-overscroll">
+    <div className="flex flex-col w-full min-h-screen bg-gradient-to-b from-muted/30 to-muted/10 py-4 px-2 logs-disable-overscroll">
       <Card className="w-full max-w-[100vw] mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
@@ -364,12 +489,12 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-      <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
+            <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-        <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
-        <SelectContent className="w-full">
+                <SelectContent className="w-full">
                   <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
                   {dropdownOptions.map((opt, idx) => (
                     <SelectItem key={idx} value={opt.value} className="w-full truncate" title={opt.label}>
@@ -408,14 +533,14 @@ export default function Logs() {
               </div>
             </div>
           </div>
-          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxWidth: '100vw', maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overflowX: 'hidden' }}>
+          <div className="bg-background rounded-xl shadow-md w-full" style={{ maxWidth: '100vw', width: '100%', maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overflowX: 'hidden' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground">Loading logs...</div>
             ) : direction === 'lht' ? (
-              <Table className="w-full" style={{ tableLayout: 'auto' }}>
+              <Table className="w-full" style={{ tableLayout: 'fixed', maxWidth: '100%' }}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '14%' }}>Message</TableHead>
+                    <TableHead className="text-base font-semibold text-foreground" style={{ width: '20%' }}>Message</TableHead>
                     <TableHead className="text-base font-semibold text-foreground" style={{ width: '10%' }}>Sent At</TableHead>
                     {statusOptions.map((status, idx) => (
                       <TableHead key={idx} className="text-base font-semibold text-center text-foreground" style={{ width: '7%' }}>{status.charAt(0).toUpperCase() + status.slice(1)}</TableHead>
@@ -426,159 +551,46 @@ export default function Logs() {
                 </TableHeader>
                 <TableBody>
                   {groupedLHT.map((msg: any) => (
-                    <>
-                      <TableRow key={msg.message_id} style={{ width: '100%', background: expandedMsgId === msg.message_id ? 'rgba(0,0,0,0.01)' : undefined }}>
+                    <TableRow key={msg.message_id} style={{ width: '100%', background: undefined }}>
+                      <TableCell
+                        className="truncate text-base log-cell-ellipsis"
+                        style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        title={msg.message_text || ''}
+                        onClick={() => handleExpand(msg.message_text || '', 'Message')}
+                      >
+                        {msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}
+                      </TableCell>
+                      <TableCell
+                        className="text-sm log-cell-ellipsis"
+                        style={{ color: 'black', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                        title={formatDate(msg.sent_at)}
+                        onClick={() => handleExpand(formatDate(msg.sent_at), 'Sent At')}
+                      >
+                        {formatDate(msg.sent_at)}
+                      </TableCell>
+                      {statusOptions.map((status, idx) => (
                         <TableCell
-                          className="truncate text-base log-cell-ellipsis"
-                          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                          title={msg.message_text || ''}
-                          onClick={() => handleExpand(msg.message_text || '', 'Message')}
-                        >
-                          {msg.message_text.length > 100 ? `${msg.message_text.slice(0, 100)}...` : msg.message_text}
-                        </TableCell>
-                        <TableCell
-                          className="text-sm log-cell-ellipsis"
-                          style={{ color: 'black', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                          title={formatDate(msg.sent_at)}
-                          onClick={() => handleExpand(formatDate(msg.sent_at), 'Sent At')}
-                        >
-                          {formatDate(msg.sent_at)}
-                        </TableCell>
-                        {statusOptions.map((status, idx) => (
-                          <TableCell
-                            key={idx}
-                            className="text-center font-semibold text-base text-foreground log-cell-ellipsis"
-                            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                            title={String(statusCountsByMsg[msg.message_id]?.[status] || 0)}
-                          >
-                            {statusCountsByMsg[msg.message_id]?.[status] || 0}
-                          </TableCell>
-                        ))}
-                        <TableCell
+                          key={idx}
                           className="text-center font-semibold text-base text-foreground log-cell-ellipsis"
                           style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                          title={String(msg.current_active_subscribers)}
+                          title={String(statusCountsByMsg[msg.message_id]?.[status] || 0)}
                         >
-                          {msg.current_active_subscribers}
+                          {statusCountsByMsg[msg.message_id]?.[status] || 0}
                         </TableCell>
-                        <TableCell className="text-center">
-                          <Button size="sm" variant="outline" onClick={() => setExpandedMsgId(expandedMsgId === msg.message_id ? null : msg.message_id)}>
-                            <Eye className="w-4 h-4 mr-1" />
-                            {expandedMsgId === msg.message_id ? "Hide" : "Details"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      {expandedMsgId === msg.message_id && (
-                        <TableRow style={{ width: '100%' }}>
-                          <TableCell colSpan={5 + statusOptions.length} className="p-0 border-none">
-                            <div className="flex justify-center items-center py-4" style={{ width: '100%' }}>
-                              <div className="w-full flex justify-center" style={{ width: '100%' }}>
-                                <div className="rounded-2xl bg-gray-100 text-black border border-primary/20 shadow-lg p-6" style={{ maxWidth: '98%', width: '100%' }}>
-                                  <h3 className="text-lg font-semibold mb-4" style={{ color: 'black' }}>Delivery Details</h3>
-                                  <div className="text-sm mb-4">
-                                    <strong>Full Message: </strong>{msg.message_text}
-                                  </div>
-                                  <p className="text-sm mb-4">
-                                      <strong>Character Count:</strong> {msg.message_text ? `${msg.message_text.length}/${/[F]/.test(msg.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
-                                  </p>
-                                  <p className="text-sm mb-4"><strong>Sent To:</strong> {`${msg.delivered_count || 0} delivered / ${msg.current_active_subscribers || 0} active subscribers`}</p>
-                                  <Table className="w-full">
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }}>Name</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Phone Number</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }}>Carrier</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Sent At</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Status</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }}>Error Message</TableHead>
-                                        <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Action</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {[...msg.logs]
-                                        .sort((a: any, b: any) => {
-                                          const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
-                                          const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
-                                          const nameA = (subA?.name || a.name || "N/A").toLowerCase();
-                                          const nameB = (subB?.name || b.name || "N/A").toLowerCase();
-                                          if (nameA < nameB) return -1;
-                                          if (nameA > nameB) return 1;
-                                          // If names are equal, sort by sent_at (log.updated_at)
-                                          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
-                                        })
-                                        .map((log: any) => {
-                                          const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
-                                          return (
-                                            <TableRow key={log.id} className="hover:bg-gray-200">
-                                              <TableCell
-                                                className="font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                                                onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
-                                                title={sub?.name || log.name || 'N/A'}
-                                              >
-                                                {sub?.name || log.name || 'N/A'}
-                                              </TableCell>
-                                              <TableCell
-                                                className="font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                                                onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
-                                                title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
-                                              >
-                                                {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
-                                              </TableCell>
-                                              <TableCell
-                                                className="font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                                                onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
-                                                title={getCarrier(log, sub)}
-                                              >
-                                                {getCarrier(log, sub)}
-                                              </TableCell>
-                                              <TableCell
-                                                className="text-left font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                                                onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
-                                                title={formatDate(log.updated_at)}
-                                              >
-                                                {formatDate(log.updated_at)}
-                                              </TableCell>
-                                              <TableCell
-                                                className="text-left font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                                                onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
-                                                title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
-                                              >
-                                                {log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
-                                              </TableCell>
-                                              <TableCell
-                                                className="text-left font-normal log-cell-ellipsis"
-                                                style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
-                                                onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
-                                                title={log.error_message || ''}
-                                              >
-                                                {log.error_message ? (log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message) : ''}
-                                              </TableCell>
-                                              <TableCell className="text-left font-normal">
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  onClick={() => retryMessage(log)}
-                                                >
-                                                  {retryingId === log.id ? 'Retrying...' : 'Retry'}
-                                                </Button>
-                                              </TableCell>
-                                            </TableRow>
-                                          );
-                                        })}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
+                      ))}
+                      <TableCell
+                        className="text-center font-semibold text-base text-foreground log-cell-ellipsis"
+                        style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        title={String(msg.current_active_subscribers)}
+                      >
+                        {msg.current_active_subscribers}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button size="sm" variant="outline" onClick={() => openDetailsModal(msg)}>
+                          <Eye className="w-4 h-4 mr-1" /> Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -682,7 +694,20 @@ export default function Logs() {
           </div>
         </CardContent>
       </Card>
-  <ExpandModal open={!!expandValue} onClose={handleCloseExpand} value={expandValue || ''} label={expandLabel} />
-  </div>
+      <ExpandModal open={!!expandValue} onClose={handleCloseExpand} value={expandValue || ''} label={expandLabel} />
+      <DetailsModal
+        isOpen={detailsModalOpen}
+        onClose={closeDetailsModal}
+        details={detailsModalMsg}
+        subscribersData={subscribersData}
+        statusOptions={statusOptions}
+        retryingId={retryingId}
+        retryMessage={retryMessage}
+        formatPhoneNumber={formatPhoneNumber}
+        formatDate={formatDate}
+        getCarrier={getCarrier}
+        handleExpand={handleExpand}
+      />
+    </div>
   );
 }
