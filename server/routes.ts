@@ -68,28 +68,23 @@ async function sendMessageAndLog({
   }
 
   // Log the outgoing payload for debugging
-  console.log('[sendMessageAndLog] Sending message with payload:', JSON.stringify({
+  const payload = {
     from: telnyxNumber,
     to,
     text,
     webhook_url: webhookUrl,
     use_profile_webhooks: false,
     auto_detect: true,
-    messaging_profile_id: profileId || undefined,
-  }, null, 2));
+    messaging_profile_id: profileId,
+  };
+  // Remove undefined fields (if any)
+  Object.keys(payload).forEach(key => (payload as Record<string, any>)[key] === undefined && delete (payload as Record<string, any>)[key]);
+  console.log('[sendMessageAndLog] Sending message with payload:', JSON.stringify(payload, null, 2));
 
   let telnyxResponse = null;
   let carrier = null;
   try {
-    telnyxResponse = await new Telnyx(apiKey).messages.create({
-      from: telnyxNumber,
-      to,
-      text,
-      webhook_url: webhookUrl,
-      use_profile_webhooks: false,
-      auto_detect: true,
-      messaging_profile_id: profileId || undefined,
-    });
+    telnyxResponse = await new Telnyx(apiKey).messages.create(payload);
     // Log the full Telnyx API response for debugging
     console.log('[sendMessageAndLog] Telnyx API response:', JSON.stringify(telnyxResponse, null, 2));
 
@@ -116,34 +111,55 @@ async function sendMessageAndLog({
     }
   } catch (error) {
     // If no error_message, log as invalid and use error name
+    let extraError = '';
+    if (error && typeof error === 'object') {
+      if ('raw' in error && (error as any).raw) {
+        if ((error as any).raw.errors) {
+          extraError += ' | raw.errors: ' + JSON.stringify((error as any).raw.errors);
+        }
+        if ((error as any).raw.responseBody) {
+          extraError += ' | raw.responseBody: ' + (error as any).raw.responseBody;
+        }
+      }
+      if ('responseBody' in error && (error as any).responseBody) {
+        extraError += ' | responseBody: ' + (error as any).responseBody;
+      }
+    }
     if (!error_message) {
       status = 'invalid';
       if (error && typeof error === 'object' && 'type' in error && typeof (error as any).type === 'string') {
-        error_message = (error as any).type;
+        error_message = (error as any).type + extraError;
       } else if (error && typeof error === 'object' && 'name' in error && typeof (error as any).name === 'string') {
-        error_message = (error as any).name;
+        error_message = (error as any).name + extraError;
       } else {
-        error_message = 'UnknownError';
+        error_message = 'UnknownError' + extraError;
       }
     } else {
+      error_message += extraError;
       status = 'failed';
     }
     telnyxMsgId = null;
     // Log the error object for debugging
     console.error('[sendMessageAndLog] Telnyx API error:', error);
+    if (error && typeof error === 'object') {
+      if ('raw' in error) {
+        console.error('[sendMessageAndLog] Telnyx error.raw:', JSON.stringify((error as any).raw, null, 2));
+        if ((error as any).raw && (error as any).raw.errors) {
+          console.error('[sendMessageAndLog] Telnyx error.raw.errors:', JSON.stringify((error as any).raw.errors, null, 2));
+        }
+        if ((error as any).raw && (error as any).raw.responseBody) {
+          console.error('[sendMessageAndLog] Telnyx error.raw.responseBody:', (error as any).raw.responseBody);
+        }
+      }
+      if ('responseBody' in error) {
+        console.error('[sendMessageAndLog] Telnyx error.responseBody:', (error as any).responseBody);
+      }
+    }
     if (telnyxResponse) {
       console.log('[sendMessageAndLog] Telnyx API response (in error):', JSON.stringify(telnyxResponse, null, 2));
     }
     // Log the outgoing payload again for error context
-    console.log('[sendMessageAndLog] Outgoing payload (in error):', JSON.stringify({
-      from: telnyxNumber,
-      to,
-      text,
-      webhook_url: webhookUrl,
-      use_profile_webhooks: false,
-      auto_detect: true,
-      messaging_profile_id: profileId || undefined,
-    }, null, 2));
+    console.log('[sendMessageAndLog] Outgoing payload (in error):', JSON.stringify(payload, null, 2));
   }
 
   await storage.createDeliveryLog({
@@ -236,6 +252,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('No valid recipients found');
       }
 
+
+      // Log all recipients before sending
+      console.log('[Bulk Send] Recipients:', recipients.map(r => r.phone_number));
+
       const deliveryPromises = recipients.map(async (subscriber) => {
         const result = await sendMessageAndLog({
           to: subscriber.phone_number,
@@ -246,8 +266,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subscriber_id: subscriber.id ?? null,
           storage,
         });
-        if (!result.success) {
-          console.log(`Failed delivery to ${subscriber.phone_number}: ${result.error}`);
+        if (result.success) {
+          console.log(`[Bulk Send] Success: ${subscriber.phone_number}`);
+        } else {
+          console.log(`[Bulk Send] Failure: ${subscriber.phone_number} | Error: ${result.error}`);
         }
         return { success: result.success, subscriber: subscriber.phone_number, error: result.error };
       });
@@ -314,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             );
             const lookupResp = await resp.json();
-            console.log('number lookup response:', lookupResp);
+            //console.log('number lookup response:', lookupResp);
             const lookup = lookupResp.data;
             //console.log('[Subscriber Carrier Lookup]', lookup);
             let normalizedCarrier = lookup.carrier && lookup.carrier.name ? lookup.carrier.name : '';
