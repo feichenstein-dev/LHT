@@ -410,13 +410,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
       if (subscriber && apiKey && telnyxNumber) {
         const messageText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-        await sendMessageAndLog({
-          to: subscriber.phone_number,
-          text: messageText,
-          name: subscriber.name ?? null,
-          direction: 'outbound',
-          storage,
-        });
+        try {
+          await sendMessageAndLog({
+            to: subscriber.phone_number,
+            text: messageText,
+            name: subscriber.name ?? null,
+            direction: 'outbound',
+            storage,
+          });
+        } catch (error) {
+          console.error('[BACKEND] Failed to send welcome message to new subscriber:', error);
+        }
       }
 
       res.json(subscriber);
@@ -481,13 +485,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         console.log(`[PATCH /api/subscribers/:id] Should send text?`, shouldSend, '| Message:', messageText);
         if (shouldSend) {
-          await sendMessageAndLog({
-            to: updatedSubscriber.phone_number,
-            text: messageText,
-            name: updatedSubscriber.name ?? null,
-            direction: 'outbound',
-            storage,
-          });
+          try {
+            await sendMessageAndLog({
+              to: updatedSubscriber.phone_number,
+              text: messageText,
+              name: updatedSubscriber.name ?? null,
+              direction: 'outbound',
+              storage,
+            });
+          } catch (error) {
+            console.error('[BACKEND] Failed to send status change message:', error);
+          }
         }
       }
 
@@ -537,13 +545,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const telnyxNumber = process.env.TELNYX_PHONE_NUMBER;
       if (subscriber && apiKey && telnyxNumber) {
         const messageText = `You have been unsubscribed from Sefer Chofetz Chaim Texts. Reply JOIN with your name to subscribe again.`;
-        await sendMessageAndLog({
-          to: subscriber.phone_number,
-          text: messageText,
-          name: subscriber.name ?? null,
-          direction: 'outbound',
-          storage,
-        });
+        try {
+          await sendMessageAndLog({
+            to: subscriber.phone_number,
+            text: messageText,
+            name: subscriber.name ?? null,
+            direction: 'outbound',
+            storage,
+          });
+        } catch (error) {
+          console.error('[BACKEND] Failed to send unsubscribe message:', error);
+        }
       }
 
       await storage.deleteSubscriber(id);
@@ -694,33 +706,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
       // Update the original delivery log row (status 'sent') to the final status
-      // Try to match by phone_number and message_text, and status 'sent'
-      // If you have message_id or telnyx_message_id, you can use those as well
+      // Try to match by phone_number, message_text, direction 'outbound', and status 'sent'
       console.log('[WEBHOOK DEBUG] phone_number:', phone_number);
       console.log('[WEBHOOK DEBUG] message_text:', text);
       console.log('[WEBHOOK DEBUG] status to write:', status);
       console.log('[WEBHOOK DEBUG] telnyx_message_id:', telnyxMessageId);
       console.log('[WEBHOOK DEBUG] error_message:', combinedError);
       console.log('[WEBHOOK DEBUG] direction: outbound');
-      const { error: updateError, data: updateData } = await storageModule.supabase
+      
+      // Update the delivery log using the telnyx_message_id for precise matching
+      console.log('[WEBHOOK DEBUG] Looking for log with telnyx_message_id:', telnyxMessageId);
+      
+      const { data: existingLogs, error: fetchError } = await storageModule.supabase
         .from('delivery_logs')
-        .update({
-          status,
-          telnyx_message_id: telnyxMessageId,
-          error_message: combinedError
-        })
-        .match({
-          phone_number,
-          message_text: text,
-          direction: 'outbound'
-        });
-      console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
-
-      if (updateError) {
-        console.error('[BACKEND] Failed to update delivery log status:', updateError);
-        // Optionally, fall back to inserting a new log if update fails
+        .select('*')
+        .eq('telnyx_message_id', telnyxMessageId);
+      
+      if (fetchError) {
+        console.error('[WEBHOOK DEBUG] Error fetching existing logs:', fetchError);
+      }
+      
+      if (existingLogs && existingLogs.length > 0) {
+        // Update the log that matches the telnyx_message_id
+        const logToUpdate = existingLogs[0];
+        console.log('[WEBHOOK DEBUG] Found existing log to update:', logToUpdate.id);
+        
+        const { error: updateError, data: updateData } = await storageModule.supabase
+          .from('delivery_logs')
+          .update({
+            status,
+            error_message: combinedError,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', logToUpdate.id);
+          
+        console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
+        
+        if (updateError) {
+          console.error('[BACKEND] Failed to update delivery log status:', updateError);
+        } else {
+          console.log('[BACKEND] Successfully updated delivery log with status:', status, '| Error:', combinedError);
+        }
+      } else {
+        console.log('[WEBHOOK DEBUG] No existing log found with telnyx_message_id:', telnyxMessageId);
+        // Fallback: create a new log if no existing log is found
         await storage.createDeliveryLog({
-          message_id: null, // If you have message_id, pass it here
+          message_id: null,
           subscriber_id: subscriber ? subscriber.id : null,
           status,
           telnyx_message_id: telnyxMessageId,
@@ -730,15 +761,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           phone_number,
           error_message: combinedError
         });
-        console.log('[BACKEND] Inserted new delivery log due to update failure.');
-      } else {
-        console.log('[BACKEND] Updated delivery log with status:', status, '| Error:', combinedError);
+        console.log('[BACKEND] Created new delivery log due to no existing log found with telnyx_message_id.');
       }
-        }
 
         if (data && data.event_type === "message.received") {
             const from = typeof data.payload.from === 'string' ? data.payload.from : data.payload.from?.phone_number;
             const text = data.payload.text;
+            const telnyxMessageId = data.payload.id;
+            const carrier = data.payload.from?.carrier || null;
+            
             // Log if the inbound message is from your Telnyx number
             if (from === telnyxNumber) {
                 console.warn('[BACKEND] Inbound SMS is from your own Telnyx number:', from);
@@ -746,6 +777,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log('[BACKEND] Inbound SMS received:');
             console.log('  From:', from);
             console.log('  Text:', text);
+            console.log('  Telnyx Message ID:', telnyxMessageId);
+            console.log('  Carrier:', carrier);
             console.log('  Full payload:', JSON.stringify(data.payload, null, 2));
             const joinMatch = text.match(/^join(.*)$/i);
             const stopMatch = text.match(/^stop$/i);
@@ -762,6 +795,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message_text: text,
                 name: subscriber ? subscriber.name : null,
                 phone_number: from,
+                telnyx_message_id: telnyxMessageId,
+                carrier: carrier,
             });
 
             // JOIN keyword logic
@@ -793,13 +828,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (apiKey && telnyxNumber) {
           const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
           console.log('[BACKEND] Sending JOIN reply to', from);
-          await sendMessageAndLog({
-            to: from,
-            text: replyText,
-            name: subscriber?.name ?? null,
-            direction: 'outbound',
-            storage,
-          });
+          try {
+            await sendMessageAndLog({
+              to: from,
+              text: replyText,
+              name: subscriber?.name ?? null,
+              direction: 'outbound',
+              storage,
+            });
+          } catch (error) {
+            console.error('[BACKEND] Failed to send JOIN reply:', error);
+          }
         }
             }
             // START keyword logic (unblock and send welcome)
@@ -810,13 +849,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (apiKey && telnyxNumber) {
           const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
           console.log('[BACKEND] Sending START reply to', from);
-          await sendMessageAndLog({
-            to: from,
-            text: replyText,
-            name: subscriber?.name ?? null,
-            direction: 'outbound',
-            storage,
-          });
+          try {
+            await sendMessageAndLog({
+              to: from,
+              text: replyText,
+              name: subscriber?.name ?? null,
+              direction: 'outbound',
+              storage,
+            });
+          } catch (error) {
+            console.error('[BACKEND] Failed to send START reply:', error);
+          }
         }
             }
             // HELP keyword logic
@@ -824,15 +867,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (apiKey && telnyxNumber) {
           const replyText = `You are currently subscribed to Sefer Chofetz Chaim Texts. Reply STOP to unsubscribe at any time. Reply JOIN with your name to subscribe again.`;
           console.log('[BACKEND] Sending HELP reply to', from);
-          await sendMessageAndLog({
-            to: from,
-            text: replyText,
-            name: subscriber?.name ?? null,
-            direction: 'outbound',
-            storage,
-          });
+          try {
+            await sendMessageAndLog({
+              to: from,
+              text: replyText,
+              name: subscriber?.name ?? null,
+              direction: 'outbound',
+              storage,
+            });
+          } catch (error) {
+            console.error('[BACKEND] Failed to send HELP reply:', error);
+          }
         }
-            }
             // STOP keyword logic
             else if (stopMatch) {
                 let wasActive = subscriber && subscriber.status === 'active';
@@ -853,6 +899,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(200).json({ received: true });
     } catch (error) {
         console.error("Error processing Telnyx webhook:", error);
+        
+        // Log webhook processing errors as delivery logs for debugging
+        try {
+          await storage.createDeliveryLog({
+            message_id: null,
+            subscriber_id: null,
+            status: "webhook_error",
+            direction: "system",
+            message_text: `Webhook processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            name: null,
+            phone_number: null,
+            error_message: error instanceof Error ? error.stack : String(error),
+          });
+        } catch (logError) {
+          console.error("Failed to log webhook processing error:", logError);
+        }
+        
         res.status(500).json({ message: "Failed to process webhook" });
         console.log('========== End Telnyx Webhook ==========');
         console.log('========== End Telnyx Webhook ==========');
