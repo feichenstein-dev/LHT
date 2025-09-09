@@ -47,6 +47,7 @@ async function sendMessageAndLog({
   let error_message = null;
   let telnyxMsgId = null;
 
+
   // Pre-send phone number validation
   const phoneRegex = /^\+[1-9]\d{9,14}$/;
   if (!phoneRegex.test(to)) {
@@ -54,7 +55,7 @@ async function sendMessageAndLog({
     error_message = 'Invalid phone number format';
     await storage.createDeliveryLog({
       message_id,
-
+      phone_number: to,
       name,
       message_text: text,
       status,
@@ -65,6 +66,17 @@ async function sendMessageAndLog({
     });
     return { success: false, status, error: error_message, telnyx_message_id: null };
   }
+
+  // Log the outgoing payload for debugging
+  console.log('[sendMessageAndLog] Sending message with payload:', JSON.stringify({
+    from: telnyxNumber,
+    to,
+    text,
+    webhook_url: webhookUrl,
+    use_profile_webhooks: false,
+    auto_detect: true,
+    messaging_profile_id: profileId || undefined,
+  }, null, 2));
 
   let telnyxResponse = null;
   let carrier = null;
@@ -122,6 +134,16 @@ async function sendMessageAndLog({
     if (telnyxResponse) {
       console.log('[sendMessageAndLog] Telnyx API response (in error):', JSON.stringify(telnyxResponse, null, 2));
     }
+    // Log the outgoing payload again for error context
+    console.log('[sendMessageAndLog] Outgoing payload (in error):', JSON.stringify({
+      from: telnyxNumber,
+      to,
+      text,
+      webhook_url: webhookUrl,
+      use_profile_webhooks: false,
+      auto_detect: true,
+      messaging_profile_id: profileId || undefined,
+    }, null, 2));
   }
 
   await storage.createDeliveryLog({
@@ -193,6 +215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         numbers = [req.body.numbers];
       }
 
+
       let recipients = [];
       if (numbers.length > 0) {
         // If numbers provided, fetch subscribers by those numbers (if possible)
@@ -205,8 +228,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         recipients = await storage.getActiveSubscribers();
       }
 
+      // Filter out invalid phone numbers before sending
+      const phoneRegex = /^\+[1-9]\d{9,14}$/;
+      recipients = recipients.filter(r => r.phone_number && phoneRegex.test(r.phone_number));
+
       if (!recipients || recipients.length === 0) {
-        throw new Error('No recipients found');
+        throw new Error('No valid recipients found');
       }
 
       const deliveryPromises = recipients.map(async (subscriber) => {
@@ -287,7 +314,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             );
             const lookupResp = await resp.json();
+            console.log('number lookup response:', lookupResp);
             const lookup = lookupResp.data;
+            //console.log('[Subscriber Carrier Lookup]', lookup);
             let normalizedCarrier = lookup.carrier && lookup.carrier.name ? lookup.carrier.name : '';
             let legalCarrier = lookup.carrier && lookup.carrier.full_name ? lookup.carrier.full_name : '';
             if (normalizedCarrier && normalizedCarrier.toLowerCase().includes('telnyx')) normalizedCarrier = '';
