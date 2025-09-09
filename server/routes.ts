@@ -727,25 +727,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (existingLogs && existingLogs.length > 0) {
-          // Update the log that matches the telnyx_message_id
-          const logToUpdate = existingLogs[0];
-          console.log('[WEBHOOK DEBUG] Found existing log to update:', logToUpdate.id);
-
-          const { error: updateError, data: updateData } = await storageModule.supabase
-            .from('delivery_logs')
-            .update({
-              status,
-              error_message: combinedError,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', logToUpdate.id);
-
-          console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
-
-          if (updateError) {
-            console.error('[BACKEND] Failed to update delivery log status:', updateError);
-          } else {
-            console.log('[BACKEND] Successfully updated delivery log with status:', status, '| Error:', combinedError);
+          // Always update ALL logs for this telnyx_message_id to the FINAL status
+          for (const logToUpdate of existingLogs) {
+            console.log('[WEBHOOK DEBUG] Found existing log to update:', logToUpdate.id);
+            const { error: updateError, data: updateData } = await storageModule.supabase
+              .from('delivery_logs')
+              .update({
+                status, // always set to the FINAL webhook status
+                error_message: combinedError,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', logToUpdate.id);
+            console.log('[WEBHOOK DEBUG] supabase update result:', updateData, '| error:', updateError);
+            if (updateError) {
+              console.error('[BACKEND] Failed to update delivery log status:', updateError);
+            } else {
+              console.log('[BACKEND] Successfully updated delivery log with status:', status, '| Error:', combinedError);
+            }
           }
         } else {
           console.log('[WEBHOOK DEBUG] No existing log found with telnyx_message_id:', telnyxMessageId);
