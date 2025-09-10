@@ -88,6 +88,7 @@ export default function Messages() {
         queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
         queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
         queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+        window.location.reload();
       }, 300);
     },
     onError: (error: any) => {

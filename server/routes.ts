@@ -649,10 +649,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           from
         } = data.payload;
 
-        // delivery_status comes from the to[0].status if available, else 'unknown'
+        // delivery_status comes from the to[0].status if available, else 'unknown', with custom logic
         let delivery_status = 'unknown';
         if (Array.isArray(to) && to.length > 0 && typeof to[0] === 'object' && 'status' in to[0]) {
           delivery_status = to[0].status;
+        }
+        // Custom status normalization
+        if (typeof delivery_status === 'string') {
+          const lowerStatus = delivery_status.toLowerCase();
+          if (lowerStatus.includes('fail')) {
+            delivery_status = 'Failed';
+          } else if (lowerStatus.includes('delivered')) {
+            delivery_status = 'Delivered';
+          } else if (lowerStatus.includes('invalid')) {
+            delivery_status = 'Invalid';
+          }
+        }
+        if (!delivery_status) {
+          delivery_status = 'Unknown';
         }
 
         let phone_number = "";
