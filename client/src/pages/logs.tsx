@@ -419,10 +419,10 @@ export default function Logs() {
     const allStatuses = new Set<string>();
     groupedLHT.forEach((msg: any) => {
       msg.logs.forEach((log: any) => {
-        if (log.status) allStatuses.add(log.status);
+      if (log.status) allStatuses.add(log.status.toLowerCase());
       });
     });
-    statusOptions = Array.from(allStatuses);
+    statusOptions = Array.from(allStatuses).map(status => status.charAt(0).toUpperCase() + status.slice(1));
     // For each message, count logs by status
     groupedLHT.forEach((msg: any) => {
       statusCountsByMsg[msg.message_id] = {};

@@ -5,7 +5,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/ui/message-bubble";
 import { SubscribersModal } from "@/components/subscribers-modal";
 import { apiRequest } from "@/lib/queryClient";
-import { formatTimestamp } from "@/lib/supabase";
 import { Send, Users } from "lucide-react";
 import type { Message, Subscriber } from "@shared/schema";
 
