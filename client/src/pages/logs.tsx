@@ -34,7 +34,37 @@ function formatDate(dateStr: string) {
 }
 
 function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions, retryingId, retryMessage, formatPhoneNumber, formatDate, getCarrier, handleExpand }: { isOpen: boolean; onClose: () => void; details: any; subscribersData: any; statusOptions: string[]; retryingId: string | null; retryMessage: (log: any) => void; formatPhoneNumber: any; formatDate: any; getCarrier: any; handleExpand: any; }) {
+  const [sortCol, setSortCol] = useState<string>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   if (!isOpen || !details) return null;
+
+  const getValue = (log: any, sub: any, col: string) => {
+    switch (col) {
+      case 'name': return (sub?.name || log.name || 'N/A').toLowerCase();
+      case 'phone': return formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number;
+      case 'carrier': return getCarrier(log, sub);
+      case 'sent': return formatDate(log.updated_at);
+      case 'status': return log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '';
+      case 'error': return log.error_message || '';
+      default: return '';
+    }
+  };
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const sortedLogs = [...(details.logs || [])].sort((a: any, b: any) => {
+    const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
+    const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
+    const valA = getValue(a, subA, sortCol);
+    const valB = getValue(b, subB, sortCol);
+    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-lg p-6 max-w-6xl w-[92vw] relative" onClick={e => e.stopPropagation()}>
@@ -53,90 +83,80 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
           <Table className="w-full">
             <TableHeader>
               <TableRow>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }}>Name</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Phone Number</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }}>Carrier</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }}>Sent At</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Status</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }}>Error Message</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }} onClick={() => handleSort('name')}>Name {sortCol === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }} onClick={() => handleSort('phone')}>Phone Number {sortCol === 'phone' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }} onClick={() => handleSort('carrier')}>Carrier {sortCol === 'carrier' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }} onClick={() => handleSort('sent')}>Sent At {sortCol === 'sent' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }} onClick={() => handleSort('status')}>Status {sortCol === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }} onClick={() => handleSort('error')}>Error Message {sortCol === 'error' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[...(details.logs || [])]
-                .sort((a: any, b: any) => {
-                  const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
-                  const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
-                  const nameA = (subA?.name || a.name || "N/A").toLowerCase();
-                  const nameB = (subB?.name || b.name || "N/A").toLowerCase();
-                  if (nameA < nameB) return -1;
-                  if (nameA > nameB) return 1;
-                  return 0;
-                })
-                .map((log: any) => {
-                  const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
-                  return (
-                    <TableRow key={log.id} className="hover:bg-gray-200">
-                      <TableCell
-                        className="font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                        onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
-                        title={sub?.name || log.name || 'N/A'}
+              {sortedLogs.map((log: any) => {
+                const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+                return (
+                  <TableRow key={log.id} className="hover:bg-gray-200">
+                    <TableCell
+                      className="font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
+                      title={sub?.name || log.name || 'N/A'}
+                    >
+                      {sub?.name || log.name || 'N/A'}
+                    </TableCell>
+                    <TableCell
+                      className="font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
+                      title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                    >
+                      {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
+                    </TableCell>
+                    <TableCell
+                      className="font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
+                      title={getCarrier(log, sub)}
+                    >
+                      {getCarrier(log, sub)}
+                    </TableCell>
+                    <TableCell
+                      className="text-left font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
+                      title={formatDate(log.updated_at)}
+                    >
+                      {formatDate(log.updated_at)}
+                    </TableCell>
+                    <TableCell
+                      className="text-left font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
+                      title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                    >
+                      {log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
+                    </TableCell>
+                    <TableCell
+                      className="text-left font-normal log-cell-ellipsis"
+                      style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
+                      onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
+                      title={log.error_message || ''}
+                    >
+                      {log.error_message ? (log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message) : ''}
+                    </TableCell>
+                    <TableCell className="text-left font-normal">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => retryMessage(log)}
                       >
-                        {sub?.name || log.name || 'N/A'}
-                      </TableCell>
-                      <TableCell
-                        className="font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                        onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
-                        title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
-                      >
-                        {formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
-                      </TableCell>
-                      <TableCell
-                        className="font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                        onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
-                        title={getCarrier(log, sub)}
-                      >
-                        {getCarrier(log, sub)}
-                      </TableCell>
-                      <TableCell
-                        className="text-left font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                        onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
-                        title={formatDate(log.updated_at)}
-                      >
-                        {formatDate(log.updated_at)}
-                      </TableCell>
-                      <TableCell
-                        className="text-left font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                        onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
-                        title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
-                      >
-                        {log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
-                      </TableCell>
-                      <TableCell
-                        className="text-left font-normal log-cell-ellipsis"
-                        style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
-                        onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
-                        title={log.error_message || ''}
-                      >
-                        {log.error_message ? (log.error_message.length > 24 ? `${log.error_message.slice(0, 24)}...` : log.error_message) : ''}
-                      </TableCell>
-                      <TableCell className="text-left font-normal">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => retryMessage(log)}
-                        >
-                          {retryingId === log.id ? 'Retrying...' : 'Retry'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        {retryingId === log.id ? 'Retrying...' : 'Retry'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
