@@ -48,16 +48,34 @@ export default function Messages() {
     };
   }, [queryClient]);
 
+  // Fetch delivery logs for all messages
+  const { data: deliveryLogs = [] } = useQuery<any[]>({
+    queryKey: ["/api/delivery-logs", { limit: 10000 }],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/delivery-logs?limit=10000");
+      const data = await response.json();
+      return data.logs || [];
+    },
+    staleTime: 60000,
+  });
+
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ExtendedMessage[]>({
     queryKey: ["/api/messages"],
     select: (msgs: ExtendedMessage[]) =>
       msgs
-        .map((msg: ExtendedMessage) => ({
-          ...msg,
-          delivered_count: msg.delivered_count || 0,
-          current_active_subscribers: msg.current_active_subscribers || 0,
-          status: msg.status || "unknown",
-        }))
+        .map((msg: ExtendedMessage) => {
+          // Count delivered logs for this message (handle string/number id)
+          const msgIdStr = String(msg.id);
+          const deliveredCount = deliveryLogs.filter(
+            (log) => String(log.message_id) === msgIdStr && typeof log.status === 'string' && log.status.toLowerCase() === "delivered"
+          ).length;
+          return {
+            ...msg,
+            delivered_count: deliveredCount,
+            current_active_subscribers: msg.current_active_subscribers || 0,
+            status: msg.status || "unknown",
+          };
+        })
         .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime()),
   });
 
