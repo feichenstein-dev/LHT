@@ -396,14 +396,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/subscribers", async (req, res) => {
     try {
-      const subscriberData = insertSubscriberSchema.parse(req.body);
+      // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
+      let sanitizedName = req.body.name;
+      if (typeof sanitizedName === 'string') {
+        sanitizedName = sanitizedName.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
+        sanitizedName = sanitizedName
+          .split(' ')
+          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+      }
+      const subscriberData = {
+        ...req.body,
+        name: sanitizedName
+      };
       // Check if subscriber already exists
       const existing = await storage.getSubscriberByPhone(subscriberData.phone_number);
       if (existing) {
         return res.status(400).json({ message: "Subscriber with this phone number already exists" });
       }
 
-      const subscriber = await storage.createSubscriber(subscriberData);
+      const parsedSubscriberData = insertSubscriberSchema.parse(subscriberData);
+      const subscriber = await storage.createSubscriber(parsedSubscriberData);
 
       // Send welcome text if possible
       const apiKey = process.env.TELNYX_API_KEY;
