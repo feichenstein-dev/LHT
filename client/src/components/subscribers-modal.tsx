@@ -128,10 +128,14 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       window.alert("Please enter a valid phone number");
       return;
     }
-    // Sanitize subscriber name: remove non-alpha chars from start/end, keep internal whitespace
-    const sanitizedName = subscriberName
+    // Sanitize subscriber name: remove non-alpha from start/end, title case
+    let sanitizedName = subscriberName
       .replace(/^[^A-Za-z]+/, '')
       .replace(/[^A-Za-z]+$/, '');
+    sanitizedName = sanitizedName
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
     let formatted = phoneNumber.replace(/\D/g, '');
     if (formatted.length === 10) {
       formatted = '+1' + formatted;
@@ -169,7 +173,15 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
 
   const handleUpdateSubscriberName = () => {
     if (editingSubscriber && editingName.trim()) {
-      updateSubscriberNameMutation.mutate({ id: editingSubscriber, name: editingName.trim() }, {
+      // Sanitize: remove non-alpha from start/end, title case
+      let sanitizedName = editingName
+        .replace(/^[^A-Za-z]+/, '')
+        .replace(/[^A-Za-z]+$/, '');
+      sanitizedName = sanitizedName
+        .split(' ')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      updateSubscriberNameMutation.mutate({ id: editingSubscriber, name: sanitizedName }, {
         onSuccess: () => {
           handleCloseEditModal();
         },
