@@ -818,17 +818,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // JOIN keyword logic
-        if (joinMatch) {
-          name = joinMatch[1].trim();
-          if (name === "") name = null;
-          // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
-          if (typeof name === 'string') {
-            name = name.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
-            name = name
-              .split(' ')
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join(' ');
+        if (joinMatch || !subscriber) {
+          if (joinMatch) {
+            name = joinMatch[1].trim();
+            // If user only texted 'JOIN' (no name), use the full original message as name
+            if (name === "") {
+              name = text;
+            }
+            // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
+            if (typeof name === 'string') {
+              name = name.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
+              name = name
+                .split(' ')
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+            }
+          } else {
+            name = text;
           }
+          if (name === "") name = null;
           if (!subscriber) {
             await storage.createSubscriber({ phone_number: from, name });
             subscriber = await storage.getSubscriberByPhone(from);
