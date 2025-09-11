@@ -22,8 +22,9 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const [editingName, setEditingName] = useState<string>("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "joined_at">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  // Default sort: most recent subscribed first
+  const [sortBy, setSortBy] = useState<"name" | "joined_at">("joined_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const queryClient = useQueryClient();
   const {
