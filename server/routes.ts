@@ -332,6 +332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           failed: failedCount,
           results,
         },
+        refresh: true
       });
     } catch (error) {
       console.error("Error creating message:", error);
@@ -436,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json(subscriber);
+  res.json({ subscriber, refresh: true });
     } catch (error) {
       console.error("Error creating subscriber:", error);
       if (error instanceof z.ZodError) {
@@ -512,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ message: "Subscriber status updated successfully", subscriber: updatedSubscriber });
+  res.json({ message: "Subscriber status updated successfully", subscriber: updatedSubscriber, refresh: true });
     } catch (error) {
       console.error("Error updating subscriber status:", error);
       res.status(500).json({ message: "Failed to update subscriber status" });
@@ -534,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(404).json({ message: "Subscriber not found" });
         }
 
-        res.json({ message: "Subscriber name updated successfully", subscriber: updatedSubscriber });
+  res.json({ message: "Subscriber name updated successfully", subscriber: updatedSubscriber, refresh: true });
     } catch (error) {
         console.error("Error updating subscriber name:", error);
         res.status(500).json({ message: "Failed to update subscriber name" });
@@ -571,8 +572,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      await storage.deleteSubscriber(id);
-      res.json({ message: "Subscriber deleted successfully" });
+  await storage.deleteSubscriber(id);
+  res.json({ message: "Subscriber deleted successfully", refresh: true });
     } catch (error) {
       console.error("Error deleting subscriber:", error);
       res.status(500).json({ message: "Failed to delete subscriber" });
@@ -796,7 +797,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('  Telnyx Message ID:', telnyxMessageId);
         console.log('  Carrier:', carrier);
         console.log('  Full payload:', JSON.stringify(data.payload, null, 2));
-        const joinMatch = text.match(/^join(.*)$/i);
+  // Match any occurrence of 'join' (case-insensitive, with any characters before/after)
+  const joinMatch = text.match(/join(.*)/i);
         const stopMatch = text.match(/^stop$/i);
         const startMatch = text.match(/^start$/i);
         let name = null;
@@ -819,6 +821,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (joinMatch) {
           name = joinMatch[1].trim();
           if (name === "") name = null;
+          // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
+          if (typeof name === 'string') {
+            name = name.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
+            name = name
+              .split(' ')
+              .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ');
+          }
           if (!subscriber) {
             await storage.createSubscriber({ phone_number: from, name });
             subscriber = await storage.getSubscriberByPhone(from);

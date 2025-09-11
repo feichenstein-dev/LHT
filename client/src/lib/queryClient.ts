@@ -1,3 +1,10 @@
+// Utility to handle { refresh: true } API responses
+export function handleApiRefresh(data: any) {
+  if (data && data.refresh) {
+    // Dispatch a custom event for global React Query refetch
+    window.dispatchEvent(new Event("lht-autorefresh"));
+  }
+}
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, handleApiRefresh } from "@/lib/queryClient";
 import { formatPhoneNumber, validatePhoneNumber } from "@/lib/supabase";
 import { Trash2, Edit3, Search } from "lucide-react";
 import type { Subscriber } from "@shared/schema";
@@ -79,11 +79,11 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      handleApiRefresh(data);
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setPhoneNumber("");
       setSubscriberName("");
-      // No full window reload; modal will refresh via query
     },
   });
 
@@ -91,9 +91,9 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/subscribers/${id}`);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      handleApiRefresh(data);
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      // No full window reload; modal will refresh via query
     },
   });
 
@@ -103,9 +103,9 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       if (!response.ok) throw new Error("Failed to reactivate");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      handleApiRefresh(data);
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-      // No full window reload; modal will refresh via query
     },
   });
 
@@ -114,11 +114,11 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
       const response = await apiRequest("PATCH", `/api/subscribers/${id}/name`, { name });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      handleApiRefresh(data);
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
       setEditingSubscriber(null);
       setEditingName("");
-      // No full window reload; modal will refresh via query
     },
   });
 

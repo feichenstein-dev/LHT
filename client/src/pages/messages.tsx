@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/ui/message-bubble";
 import { SubscribersModal } from "@/components/subscribers-modal";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, handleApiRefresh } from "@/lib/queryClient";
 import { Send, Users } from "lucide-react";
 import type { Message, Subscriber } from "@shared/schema";
 
@@ -90,6 +90,7 @@ export default function Messages() {
       return response.json();
     },
     onSuccess: async (data) => {
+      handleApiRefresh(data);
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       setMessageText("");
@@ -100,13 +101,6 @@ export default function Messages() {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
       }, 0);
-      // Instead of full reload, just refresh data
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
-        window.location.reload();
-      }, 300);
     },
     onError: (error: any) => {
       logMessageStatus(null, "Error", error);

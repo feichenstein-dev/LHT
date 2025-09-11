@@ -23,6 +23,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatPhoneNumber } from "@/lib/supabase";
 import { Eye } from "lucide-react";
+import { handleApiRefresh } from "@/lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 
 function formatDate(dateStr: string) {
@@ -460,9 +461,10 @@ export default function Logs() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const data = await response.json();
+      handleApiRefresh(data);
       if (!response.ok) throw new Error('Failed to retry message');
       toast({ title: 'Retry Successful', description: 'The message has been retried successfully.' });
-      // Instead of full reload, just refresh data
       queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
