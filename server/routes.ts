@@ -921,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // All other inbound messages: do nothing
       }
 
-      res.status(200).json({ received: true });
+  res.status(200).json({ received: true, refresh: true });
     } catch (error) {
       console.error("Error processing Telnyx webhook:", error);
       // Log webhook processing errors as delivery logs for debugging
