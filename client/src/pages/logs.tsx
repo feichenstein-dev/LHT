@@ -123,71 +123,60 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
           <strong>Sent To:</strong> {`${deliveredCount || 0} delivered / ${details.current_active_subscribers || 0} active subscribers`}
         </p>
   <div className="mb-4 w-full flex flex-row gap- items-center" style={{ width: '100%', fontSize: '0.9rem' }}>
-          <div style={{ position: 'relative', flexGrow: 2, minWidth: 0, marginRight: 12, display: 'flex' }}>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name or number..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
-              style={{ minWidth: 0, fontSize: '0.9rem', paddingRight: search ? '2.2rem' : undefined }}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                aria-label="Clear search"
-                style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  margin: 0,
-                  cursor: 'pointer',
-                  width: 20,
-                  height: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#64748b',
-                  fontSize: '1.2rem',
-                  lineHeight: 1
-                }}
-              >
-                &#10005;
-              </button>
-            )}
-          </div>
-          <div style={{ position: 'relative', minWidth: 0, width: 260 }}>
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 flex-shrink-0 pr-8"
-              style={{
-                minWidth: 240,
-                maxWidth: 360,
-                width: '100%',
-                fontSize: '0.9rem',
-                height: '44px',
-                lineHeight: '1.2',
-                appearance: 'none',
-                WebkitAppearance: 'none',
-                MozAppearance: 'none',
-                background: `url('data:image/svg+xml;utf8,<svg fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M6 8L10 12L14 8\'/></svg>') no-repeat right 1rem center/1.1em 1.1em`,
-                paddingRight: '2.5rem'
-              }}
-            >
-              <option value="all">All Statuses</option>
-              <option value="retry_available">Retry Available</option>
-              {statusOptions.map((status, idx) => (
-                <option key={idx} value={status.toLowerCase()}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
-              ))}
-            </select>
-            {/* Down arrow is now part of the select background */}
-          </div>
+    <div style={{ position: 'relative', flexGrow: 2, minWidth: 0, marginRight: 12, display: 'flex' }}>
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name or number..."
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+        style={{ minWidth: 0, fontSize: '0.9rem', paddingRight: search ? '2.2rem' : undefined }}
+      />
+      {search && (
+        <button
+          type="button"
+          onClick={() => setSearch('')}
+          aria-label="Clear search"
+          style={{
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            margin: 0,
+            cursor: 'pointer',
+            width: 20,
+            height: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#64748b',
+            fontSize: '1.2rem',
+            lineHeight: 1
+          }}
+        >
+          &#10005;
+        </button>
+      )}
+    </div>
+    <div style={{ minWidth: 0, width: 260 }}>
+      <Select value={statusFilter} onValueChange={v => setStatusFilter(v)}>
+        <SelectTrigger className="w-full h-12 text-base rounded-2xl px-4">
+          <SelectValue placeholder="All Statuses" />
+        </SelectTrigger>
+        <SelectContent className="w-full">
+          <SelectItem value="all" className="w-full">All Statuses</SelectItem>
+          <SelectItem value="retry_available" className="w-full">Retry Available</SelectItem>
+          {statusOptions.map((status, idx) => (
+            <SelectItem key={idx} value={status.toLowerCase()} className="w-full">
+              <span className="text-sm font-medium text-gray-700">{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
         </div>
   <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflowY: 'auto', overflowX: 'auto' }}>
           <Table className="w-full">
@@ -586,8 +575,9 @@ export default function Logs() {
           <CardTitle className="text-2xl font-semibold">Delivery Logs</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-row gap-4 mb-6 w-full flex-wrap">
-            <div style={{ flexBasis: '28%' }}>
+          <div className="flex flex-row gap-6 mb-6 w-full" style={{ width: '100%' }}>
+            {/* Direction dropdown: 1.1fr */}
+            <div style={{ flex: 1.1, minWidth: 0 }}>
               <Select
                 value={direction}
                 onValueChange={v => {
@@ -597,7 +587,7 @@ export default function Logs() {
                   persist('logs_selected', 'all');
                 }}
               >
-                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-5">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
                 <SelectContent className="min-w-[220px] w-auto">
@@ -607,9 +597,10 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, maxWidth: '42%' }}>
+            {/* Message/Subscriber dropdown: 1.6fr */}
+            <div style={{ flex: 1.6, minWidth: 0 }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
-                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
+                <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-5">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
                 </SelectTrigger>
                 <SelectContent className="w-full">
@@ -622,33 +613,32 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexBasis: '25%', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <DatePicker
-                  selected={filterDate}
-                  onChange={date => {
-                    setFilterDate(date);
-                    persist('logs_filterDate', date ? date.toISOString().slice(0, 10) : "");
-                  }}
-                  isClearable
-                  placeholderText="All Dates"
-                  calendarClassName="rounded-2xl shadow-lg border border-gray-200"
-                  wrapperClassName="w-full"
-                  dateFormat="yyyy-MM-dd"
-                  popperPlacement="bottom"
-                  showPopperArrow={false}
-                  popperContainer={({ children }) => ReactDOM.createPortal(children, document.body)}
-                  customInput={
-                    <button
-                      type="button"
-                      className="w-full h-12 text-base bg-muted rounded-2xl px-4 border border-gray-300 text-left"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {filterDate ? filterDate.toLocaleDateString() : 'All Dates'}
-                    </button>
-                  }
-                />
-              </div>
+            {/* Date picker: 1.1fr */}
+            <div style={{ flex: 1.1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+              <DatePicker
+                selected={filterDate}
+                onChange={date => {
+                  setFilterDate(date);
+                  persist('logs_filterDate', date ? date.toISOString().slice(0, 10) : "");
+                }}
+                isClearable
+                placeholderText="All Dates"
+                calendarClassName="rounded-2xl shadow-lg border border-gray-200"
+                wrapperClassName="w-full"
+                dateFormat="yyyy-MM-dd"
+                popperPlacement="bottom"
+                showPopperArrow={false}
+                popperContainer={({ children }) => ReactDOM.createPortal(children, document.body)}
+                customInput={
+                  <button
+                    type="button"
+                    className="w-full h-12 text-base bg-muted rounded-2xl px-5 border border-gray-300 text-left"
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {filterDate ? filterDate.toLocaleDateString() : 'All Dates'}
+                  </button>
+                }
+              />
             </div>
           </div>
           <div className="bg-background rounded-xl shadow-md w-full" style={{ maxWidth: '100vw', width: '100%', maxHeight: '70vh', minHeight: '300px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overflowX: 'hidden' }}>
