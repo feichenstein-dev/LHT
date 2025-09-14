@@ -122,27 +122,72 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
         <p className="text-sm mb-5">
           <strong>Sent To:</strong> {`${deliveredCount || 0} delivered / ${details.current_active_subscribers || 0} active subscribers`}
         </p>
-  <div className="mb-4 w-full flex flex-row gap-3 items-center" style={{ width: '100%', fontSize: '0.9rem' }}>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or number..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
-            style={{ minWidth: 0, fontSize: '0.9rem' }}
-          />
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 flex-shrink-0"
-            style={{ minWidth: 220, maxWidth: 320, width: '24%', fontSize: '0.9rem' }}
-          >
-            <option value="all">All Statuses</option>
-            <option value="retry_available">Retry Available</option>
-            {statusOptions.map((status, idx) => (
-              <option key={idx} value={status.toLowerCase()}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
-            ))}
-          </select>
+  <div className="mb-4 w-full flex flex-row gap- items-center" style={{ width: '100%', fontSize: '0.9rem' }}>
+          <div style={{ position: 'relative', flexGrow: 2, minWidth: 0, marginRight: 12, display: 'flex' }}>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name or number..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+              style={{ minWidth: 0, fontSize: '0.9rem', paddingRight: search ? '2.2rem' : undefined }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  margin: 0,
+                  cursor: 'pointer',
+                  width: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                  fontSize: '1.2rem',
+                  lineHeight: 1
+                }}
+              >
+                &#10005;
+              </button>
+            )}
+          </div>
+          <div style={{ position: 'relative', minWidth: 0, width: 260 }}>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 flex-shrink-0 pr-8"
+              style={{
+                minWidth: 240,
+                maxWidth: 360,
+                width: '100%',
+                fontSize: '0.9rem',
+                height: '44px',
+                lineHeight: '1.2',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                MozAppearance: 'none',
+                background: `url('data:image/svg+xml;utf8,<svg fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M6 8L10 12L14 8\'/></svg>') no-repeat right 1rem center/1.1em 1.1em`,
+                paddingRight: '2.5rem'
+              }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="retry_available">Retry Available</option>
+              {statusOptions.map((status, idx) => (
+                <option key={idx} value={status.toLowerCase()}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
+              ))}
+            </select>
+            {/* Down arrow is now part of the select background */}
+          </div>
         </div>
   <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflowY: 'auto', overflowX: 'auto' }}>
           <Table className="w-full">
@@ -150,7 +195,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
               <TableRow>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 120, maxWidth: 260, width: 'auto' }}>Name</TableHead>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 140, maxWidth: 240, width: 'auto' }}>Phone Number</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 120, maxWidth: 220, width: 'auto' }}>Carrier</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 80, maxWidth: 120, width: 'auto' }}>Carrier</TableHead>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 160, maxWidth: 320, width: 'auto' }}>Sent At</TableHead>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 180, width: 'auto' }}>Status</TableHead>
                 <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 160, maxWidth: 320, width: 'auto' }}>Error Message</TableHead>
@@ -180,7 +225,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 120, minWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
                       title={getCarrier(log, sub)}
                     >
@@ -542,7 +587,7 @@ export default function Logs() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-row gap-4 mb-6 w-full flex-wrap">
-            <div style={{ flexBasis: '20%' }}>
+            <div style={{ flexBasis: '28%' }}>
               <Select
                 value={direction}
                 onValueChange={v => {
@@ -562,7 +607,7 @@ export default function Logs() {
                 </SelectContent>
               </Select>
             </div>
-            <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
+            <div style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, maxWidth: '42%' }}>
               <Select value={selected} onValueChange={v => { setSelected(v); persist('logs_selected', v); }}>
                 <SelectTrigger className="w-full h-12 text-base bg-muted rounded-2xl px-4">
                   <SelectValue placeholder={direction === 'lht' ? 'Filter by message' : 'Filter by subscriber'} />
