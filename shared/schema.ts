@@ -32,8 +32,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   sent_at: true,
 }).extend({
-  current_active_subscribers: z.number().optional(), 
-  delivered_count: z.number().optional(), 
+  current_active_subscribers: z.number().optional()
 });
 
 export const insertSubscriberSchema = createInsertSchema(subscribers).omit({
@@ -57,7 +56,6 @@ export type InsertDeliveryLog = z.infer<typeof insertDeliveryLogSchema>;
 
 export type Message = typeof messages.$inferSelect & {
   active_count?: number; // Added active_count field
-  delivered_count?: number; // Added delivered_count field
   status?: 'delivered' | 'failed' | 'pending';
 };
 export type Subscriber = typeof subscribers.$inferSelect;

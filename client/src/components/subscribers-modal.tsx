@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { createClient } from "@supabase/supabase-js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,53 +23,86 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   const [editingName, setEditingName] = useState<string>("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
   // Default sort: most recent subscribed first
   const [sortBy, setSortBy] = useState<"name" | "joined_at">("joined_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
 
   const queryClient = useQueryClient();
+
+  // Infinite scroll: fetch paginated, filtered, sorted subscribers from Supabase RPC
+  const PAGE_SIZE = 50;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  type SubscriberRow = {
+    id: string;
+    name: string | null;
+    phone_number: string;
+    joined_at: string;
+    status: string;
+  };
+
+
   const {
-    data: subscribers = [],
+    data: infiniteData,
     isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+    refetch,
     error: fetchError
-  } = useQuery<Subscriber[]>({
-    queryKey: ["/api/subscribers"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/subscribers");
-      const data = await response.json();
-      return data;
+  } = useInfiniteQuery<SubscriberRow[], Error>({
+    queryKey: ["get_filtered_subscribers", searchTerm, sortBy, sortOrder, statusFilter],
+    queryFn: async ({ pageParam = 0 }) => {
+      const { data, error } = await supabase.rpc("get_filtered_subscribers", {
+        p_search: searchTerm || null,
+        p_status: statusFilter || null,
+        p_sort: sortBy,
+        p_order: sortOrder,
+        p_limit: PAGE_SIZE,
+        p_offset: pageParam
+      });
+      if (error) throw error;
+      return (data || []) as SubscriberRow[];
     },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage && lastPage.length === PAGE_SIZE ? allPages.length * PAGE_SIZE : undefined,
+    initialPageParam: 0,
     enabled: open,
+    staleTime: 60000,
   });
 
-  // Filter + sort
-  const filteredSubscribers = subscribers
-    .filter((subscriber) => {
-      if (!searchTerm.trim()) return true;
-      const searchLower = searchTerm.toLowerCase();
-      const name = (subscriber.name || '').toLowerCase();
-      const nameMatch = name.includes(searchLower);
-      const phone = (subscriber.phone_number || '').replace(/\D/g, '');
-      const searchDigits = searchTerm.replace(/\D/g, '');
-      const phoneMatch = searchDigits.length > 0 && phone.includes(searchDigits);
-      return nameMatch || phoneMatch;
-    })
-    .sort((a, b) => {
-      let aVal: string | number = "";
-      let bVal: string | number = "";
+  // Combine all loaded pages
+  const subscribers: SubscriberRow[] = infiniteData ? infiniteData.pages.flat() : [];
 
-      if (sortBy === "name") {
-        aVal = (a.name || a.phone_number || "").toLowerCase();
-        bVal = (b.name || b.phone_number || "").toLowerCase();
-      } else if (sortBy === "joined_at") {
-        aVal = a.joined_at ? new Date(a.joined_at).getTime() : 0;
-        bVal = b.joined_at ? new Date(b.joined_at).getTime() : 0;
-      }
+  // Fetch dynamic status breakdown from Supabase RPC
+  const { data: statusCounts = [] } = useQuery<any[]>({
+    queryKey: ["get_subscriber_status_counts"],
+    queryFn: async () => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { data, error } = await supabase.rpc("get_subscriber_status_counts");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open,
+    staleTime: 60000,
+  });
 
-      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
-      return 0;
-    });
+
+  // Infinite scroll handler
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 100 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  };
 
   const addSubscriberMutation = useMutation({
     mutationFn: async ({ phone, name }: { phone: string; name: string }) => {
@@ -198,19 +232,27 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     });
   };
 
-  const activeSubscribers = subscribers.filter((subscriber) => subscriber.status === "active").length;
-  const inactiveSubscribers = subscribers.filter((subscriber) => subscriber.status === "inactive").length;
+
+  // Build a map of status -> count
+  const statusCountMap: Record<string, number> = {};
+  if (Array.isArray(statusCounts)) {
+    statusCounts.forEach((row) => {
+      statusCountMap[row.status] = row.count;
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl w-full p-0"
+        className="max-w-5xl w-[900px] p-0"
         style={{
           padding: 32,
           position: 'fixed',
           top: '4vh',
           left: '50%',
           transform: 'translateX(-50%)',
+          maxWidth: '90vw',
+          width: 900,
           maxHeight: '92vh',
           minHeight: 0,
           display: 'flex',
@@ -223,7 +265,18 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
         <DialogHeader>
           <DialogTitle>Manage Subscribers</DialogTitle>
           <div className="text-sm text-muted-foreground mb-2">
-            Active: {activeSubscribers} | Inactive: {inactiveSubscribers}
+            {Object.entries(statusCountMap).length === 0 ? (
+              <span>Loading status breakdown...</span>
+            ) : (
+              Object.entries(statusCountMap)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([status, count], idx, arr) => (
+                  <span key={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}: {count}
+                    {idx < arr.length - 1 ? ' | ' : ''}
+                  </span>
+                ))
+            )}
           </div>
         </DialogHeader>
 
@@ -255,7 +308,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
             </Button>
           </div>
 
-          {/* Search & Sort Controls */}
+          {/* Search, Status Filter & Sort Controls */}
           <div className="flex flex-col sm:flex-row gap-2 w-full items-center justify-between pb-2" style={{paddingLeft: 0, paddingRight: 0}}>
             <div className="relative flex-1 w-full max-w-md" style={{paddingLeft: 0}}>
               <Input
@@ -273,14 +326,31 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
               </span>
             </div>
             <div className="flex flex-row gap-2 items-center w-full sm:w-auto">
-              <span className="text-xs text-muted-foreground font-medium mr-1">Sort:</span>
+              {/* Status Filter */}
+              <span className="text-xs text-muted-foreground font-medium mr-1">Status:</span>
+              <Select value={statusFilter ?? 'all'} onValueChange={val => setStatusFilter(val === 'all' ? null : val)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {statusCounts && Array.isArray(statusCounts) && statusCounts
+                    .map((row: any) => row.status)
+                    .sort((a: string, b: string) => a.localeCompare(b))
+                    .map((status: string) => (
+                      <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {/* Sort Controls */}
+              <span className="text-xs text-muted-foreground font-medium ml-2 mr-1">Sort:</span>
               <Select value={sortBy} onValueChange={(val) => setSortBy(val as "name" | "joined_at")}> 
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[100px]">
                   <SelectValue placeholder="Sort By" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="joined_at">Subscribed Date</SelectItem>
+                  <SelectItem value="joined_at">Date</SelectItem>
                 </SelectContent>
               </Select>
               <button
@@ -296,14 +366,18 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
           </div>
 
           {/* Subscribers List */}
-          <div className="overflow-y-auto bg-white rounded-lg space-y-2" style={{ maxHeight: '70vh', paddingBottom: 48 }}>
+          <div
+            className="overflow-y-auto bg-white rounded-lg space-y-2"
+            style={{ maxHeight: '70vh', paddingBottom: 48 }}
+            onScroll={handleScroll}
+          >
             {isLoading ? (
               <div className="text-center py-4 text-muted-foreground">Loading subscribers...</div>
-            ) : filteredSubscribers.length === 0 ? (
+            ) : subscribers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">No subscribers found.</div>
             ) : (
               <>
-                {filteredSubscribers.map((subscriber) => (
+                {subscribers.map((subscriber) => (
                   <div
                     key={subscriber.id}
                     className="flex items-center justify-between p-2 border border-border rounded-lg hover:bg-muted/50"
@@ -359,6 +433,9 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
                     </div>
                   </div>
                 ))}
+                {isFetchingNextPage && (
+                  <div className="text-center py-2 text-muted-foreground">Loading more...</div>
+                )}
                 <div style={{ minHeight: 40, pointerEvents: 'none' }} />
               </>
             )}

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 // Simple modal for tap-to-expand (must be inside Logs for state)
 function ExpandModal({ open, onClose, value, label }: { open: boolean, onClose: () => void, value: string, label?: string }) {
   if (!open) return null;
@@ -13,6 +13,7 @@ function ExpandModal({ open, onClose, value, label }: { open: boolean, onClose: 
   );
 }
 import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from '../lib/supabase';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { useQuery } from "@tanstack/react-query";
@@ -34,41 +35,78 @@ function formatDate(dateStr: string) {
   });
 }
 
-function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions, retryingId, retryMessage, formatPhoneNumber, formatDate, getCarrier, handleExpand }: { isOpen: boolean; onClose: () => void; details: any; subscribersData: any; statusOptions: string[]; retryingId: string | null; retryMessage: (log: any) => void; formatPhoneNumber: any; formatDate: any; getCarrier: any; handleExpand: any; }) {
-  const [sortCol, setSortCol] = useState<string>('name');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions, retryingId, retryMessage, formatPhoneNumber, formatDate, getCarrier, handleExpand, statusCountsByMsg }: { isOpen: boolean; onClose: () => void; details: any; subscribersData: any; statusOptions: string[]; retryingId: string | null; retryMessage: (log: any) => void; formatPhoneNumber: any; formatDate: any; getCarrier: any; handleExpand: any; statusCountsByMsg?: Record<string, Record<string, number>>; }) {
+  // Sorting is disabled
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   if (!isOpen || !details) return null;
 
-  const getValue = (log: any, sub: any, col: string) => {
-    switch (col) {
-      case 'name': return (sub?.name || log.name || 'N/A').toLowerCase();
-      case 'phone': return formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number;
-      case 'carrier': return getCarrier(log, sub);
-      case 'sent': return formatDate(log.updated_at);
-      case 'status': return log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '';
-      case 'error': return log.error_message || '';
-      default: return '';
+  // Removed unused getValue function
+
+  // Sorting is disabled
+
+  // Filter logs by search (name or number) and status
+  const filteredLogs = [...(details.logs || [])].filter((log: any) => {
+    // Status filter
+    if (statusFilter === 'not_delivered') {
+      if (!log.status || log.status.toLowerCase() === 'delivered') return false;
+    } else if (statusFilter === 'retry_available') {
+      if (log.has_delivered) return false;
+    } else if (statusFilter !== 'all') {
+      if (!log.status || log.status.toLowerCase() !== statusFilter.toLowerCase()) return false;
     }
-  };
-
-  const handleSort = (col: string) => {
-    if (sortCol === col) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-  };
-
-  const sortedLogs = [...(details.logs || [])].sort((a: any, b: any) => {
+    // Search filter
+    if (!search.trim()) return true;
+    const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+    const name = (sub?.name || log.name || '').toLowerCase();
+    const phone = (sub?.phone_number || log.phone_number || '').toLowerCase();
+    const searchVal = search.toLowerCase();
+    return name.includes(searchVal) || phone.includes(searchVal);
+  });
+  // Order by name (case-insensitive), then sent at (updated_at) ascending
+  const sortedLogs = [...filteredLogs].sort((a: any, b: any) => {
     const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
     const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
-    const valA = getValue(a, subA, sortCol);
-    const valB = getValue(b, subB, sortCol);
-    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-    return 0;
+    const nameA = (subA?.name || a.name || '').toLowerCase();
+    const nameB = (subB?.name || b.name || '').toLowerCase();
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+    // If names are equal, sort by sent time ascending
+    const timeA = new Date(a.updated_at).getTime();
+    const timeB = new Date(b.updated_at).getTime();
+    return timeA - timeB;
   });
+
+  // Disable Retry if any log has has_delivered true
+  const anyDelivered = sortedLogs.some((log: any) => log.has_delivered);
+
+  // --- Delivered count logic (copied from messages.tsx) ---
+  // Accepts statusCountsData as prop or from context (for now, fallback to details.delivered_count)
+  // Use statusCountsByMsg for delivered count to match the LHT Delivered column
+  let deliveredCount = 0;
+  if (
+    details &&
+    details.message_id &&
+    statusCountsByMsg &&
+    typeof statusCountsByMsg === 'object' &&
+    statusCountsByMsg[details.message_id] &&
+    typeof statusCountsByMsg[details.message_id]['Delivered'] === 'number'
+  ) {
+    deliveredCount = statusCountsByMsg[details.message_id]['Delivered'];
+  } else if (Array.isArray(details.status_counts)) {
+    const deliveredRow = details.status_counts.find(
+      (row: any) => row.status && row.status.toLowerCase() === 'delivered'
+    );
+    if (deliveredRow) {
+      deliveredCount = deliveredRow.count;
+    }
+  } else if (typeof details.delivered_count === 'number') {
+    deliveredCount = details.delivered_count;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-lg p-6 max-w-6xl w-[92vw] relative" onClick={e => e.stopPropagation()}>
+  <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[1400px] w-[99vw] relative" onClick={e => e.stopPropagation()}>
         <button className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold" onClick={onClose} aria-label="Close">&times;</button>
         <h3 className="text-lg font-semibold mb-4">Delivery Details</h3>
         <div className="text-sm mb-4">
@@ -79,18 +117,42 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
         <p className="text-sm mb-4">
           <strong>Character Count:</strong> {details.message_text ? `${details.message_text.length}/${/[\u000fF]/.test(details.message_text) ? 670 : 1530} characters` : `0/1530 characters`}
         </p>
-        <p className="text-sm mb-4"><strong>Sent To:</strong> {`${details.delivered_count || 0} delivered / ${details.current_active_subscribers || 0} active subscribers`}</p>
+        <p className="text-sm mb-5">
+          <strong>Sent To:</strong> {`${deliveredCount || 0} delivered / ${details.current_active_subscribers || 0} active subscribers`}
+        </p>
+  <div className="mb-4 w-full flex flex-row gap-3 items-center" style={{ width: '100%', fontSize: '0.9rem' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or number..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
+            style={{ minWidth: 0, fontSize: '0.9rem' }}
+          />
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 flex-shrink-0"
+            style={{ minWidth: 220, maxWidth: 320, width: '24%', fontSize: '0.9rem' }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="retry_available">Retry Available</option>
+            {statusOptions.map((status, idx) => (
+              <option key={idx} value={status.toLowerCase()}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
+            ))}
+          </select>
+        </div>
         <div style={{ maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto' }}>
           <Table className="w-full">
             <TableHeader>
               <TableRow>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 80, maxWidth: 180, width: 'auto' }} onClick={() => handleSort('name')}>Name {sortCol === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }} onClick={() => handleSort('phone')}>Phone Number {sortCol === 'phone' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 180, width: 'auto' }} onClick={() => handleSort('carrier')}>Carrier {sortCol === 'carrier' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 90, maxWidth: 160, width: 'auto' }} onClick={() => handleSort('sent')}>Sent At {sortCol === 'sent' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }} onClick={() => handleSort('status')}>Status {sortCol === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground cursor-pointer" style={{ minWidth: 100, maxWidth: 220, width: 'auto' }} onClick={() => handleSort('error')}>Error Message {sortCol === 'error' ? (sortDir === 'asc' ? '▲' : '▼') : ''}</TableHead>
-                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 70, maxWidth: 120, width: 'auto' }}>Action</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 120, maxWidth: 260, width: 'auto' }}>Name</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 140, maxWidth: 240, width: 'auto' }}>Phone Number</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 120, maxWidth: 220, width: 'auto' }}>Carrier</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 160, maxWidth: 320, width: 'auto' }}>Sent At</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 180, width: 'auto' }}>Status</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 160, maxWidth: 320, width: 'auto' }}>Error Message</TableHead>
+                <TableHead className="text-base font-semibold text-left text-foreground" style={{ minWidth: 100, maxWidth: 180, width: 'auto' }}>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -100,7 +162,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                   <TableRow key={log.id} className="hover:bg-gray-200">
                     <TableCell
                       className="font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
                       title={sub?.name || log.name || 'N/A'}
                     >
@@ -108,7 +170,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 240, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number, 'Phone Number')}
                       title={formatPhoneNumber ? formatPhoneNumber(sub?.phone_number || log.phone_number) : sub?.phone_number || log.phone_number}
                     >
@@ -116,7 +178,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(getCarrier(log, sub), 'Carrier')}
                       title={getCarrier(log, sub)}
                     >
@@ -124,7 +186,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="text-left font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 320, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(formatDate(log.updated_at), 'Sent At')}
                       title={formatDate(log.updated_at)}
                     >
@@ -132,7 +194,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="text-left font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+                      style={{ width: 'auto', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
                       onClick={() => handleExpand(log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : '', 'Status')}
                       title={log.status ? log.status.charAt(0).toUpperCase() + log.status.slice(1) : ''}
                     >
@@ -140,7 +202,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     </TableCell>
                     <TableCell
                       className="text-left font-normal log-cell-ellipsis"
-                      style={{ width: 'auto', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
+                      style={{ width: 'auto', maxWidth: 320, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: log.error_message ? 'pointer' : undefined }}
                       onClick={() => log.error_message && handleExpand(log.error_message, 'Error Message')}
                       title={log.error_message || ''}
                     >
@@ -151,6 +213,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                         size="sm"
                         variant="outline"
                         onClick={() => retryMessage(log)}
+                        disabled={!!log.has_delivered || retryingId === log.id}
                       >
                         {retryingId === log.id ? 'Retrying...' : 'Retry'}
                       </Button>
@@ -168,6 +231,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
 
 export default function Logs() {
   // Tap-to-expand state (must be inside component)
+  console.log('RENDERING LOGS PAGE');
   const [expandValue, setExpandValue] = useState<string | null>(null);
   const [expandLabel, setExpandLabel] = useState<string | undefined>(undefined);
   const handleExpand = (value: string, label?: string) => {
@@ -276,16 +340,19 @@ export default function Logs() {
     localStorage.setItem(key, value);
   };
 
-  // Fetch logs, messages, subscribers
-  const { data: logsData, isLoading } = useQuery({
-    queryKey: ["/api/delivery-logs", "all"],
+  // Fetch logs using Supabase RPC get_filtered_logs
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ["get_filtered_logs", direction, selected, filterDate?.toISOString().slice(0, 10)],
     queryFn: async () => {
-      const response = await fetch("/api/delivery-logs?limit=10000&page=1");
-      if (!response.ok) throw new Error("Failed to fetch logs");
-      return response.json();
+      const { data, error } = await supabase.rpc('get_filtered_logs', {
+        p_direction: direction,
+        p_selected: selected,
+        p_filter_date: filterDate ? filterDate.toISOString().slice(0, 10) : null
+      });
+      if (error) throw error;
+      return data || [];
     },
   });
-  const logs = logsData?.logs || [];
 
   const { data: messagesData } = useQuery({
     queryKey: ["/api/messages"],
@@ -306,37 +373,20 @@ export default function Logs() {
     },
   });
 
-  // Dropdown options
-  let dropdownOptions: { value: string, label: string, date?: string }[] = [];
-  if (direction === 'lht' && messagesData) {
-    dropdownOptions = messagesData
-      .map((msg: any) => ({
-        value: msg.id,
-        label: `${msg.body.slice(0, 60)}${msg.body.length > 60 ? '...' : ''} (${formatDate(msg.sent_at)})`,
-        date: msg.sent_at
-      }))
-      .sort((a: { date?: string }, b: { date?: string }) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
-  } else if ((direction === 'inbound' || direction === 'outbound') && subscribersData && logs.length) {
-    // Find latest log date for each subscriber
-    const subDates: Record<string, string> = {};
-    logs.forEach((log: any) => {
-      if (log.subscriber_id) {
-        if (!subDates[log.subscriber_id] || new Date(log.updated_at) > new Date(subDates[log.subscriber_id])) {
-          subDates[log.subscriber_id] = log.updated_at;
-        }
-      }
-    });
-    dropdownOptions = subscribersData
-      .map((sub: any) => ({
-        value: sub.id,
-        label: `${sub.name || formatPhoneNumber(sub.phone_number)}`,
-        date: subDates[sub.id] || ''
-      }))
-      .sort((a: { date?: string }, b: { date?: string }) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
-  }
+  // Dropdown options using Supabase RPC get_dropdown_options
+  const { data: dropdownOptions = [] } = useQuery({
+    queryKey: ["get_dropdown_options", direction],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_dropdown_options', {
+        p_direction: direction
+      });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-  // Filter logs
-  let filteredLogs = logs.filter((log: any) => {
+  // Filter logs (ensure logs is always an array)
+  let filteredLogs = Array.isArray(logs) ? logs.filter((log: any) => {
     if (direction === 'lht') {
       if (!log.message_id) return false;
       if (selected !== 'all' && log.message_id !== selected) return false;
@@ -376,12 +426,22 @@ export default function Logs() {
       }
     }
     return true;
-  });
+  }) : [];
 
   // For LHT, group logs by message_id and filter messages by date (not logs)
   let groupedLHT: any[] = [];
   let statusOptions: string[] = [];
   let statusCountsByMsg: Record<string, Record<string, number>> = {};
+
+  // Fetch status counts from Supabase procedure (get_status_counts)
+  const { data: statusCountsData, isLoading: isStatusCountsLoading } = useQuery({
+    queryKey: ["get_status_counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_status_counts');
+      if (error) throw error;
+      return data;
+    },
+  });
 
   // Helper to get carrier: prefer log.carrier, fallback to subscriber.carrier
   const getCarrier = (log: any, sub: any) => {
@@ -389,48 +449,37 @@ export default function Logs() {
     if (sub && sub.carrier) return sub.carrier;
     return '';
   };
-  if (direction === 'lht' && messagesData) {
-    // Filter messages by date if needed
-    let filteredMessages = messagesData;
-    if (filterDate) {
-      filteredMessages = messagesData.filter((msg: any) => {
-        const msgDate = new Date(msg.sent_at);
-        return (
-          msgDate.getFullYear() === filterDate.getFullYear() &&
-          msgDate.getMonth() === filterDate.getMonth() &&
-          msgDate.getDate() === filterDate.getDate()
-        );
+  // Fetch grouped LHT logs using Supabase RPC get_grouped_lht_logs
+  const { data: groupedLHTData } = useQuery({
+    queryKey: ["get_grouped_lht_logs", selected, filterDate?.toISOString().slice(0, 10)],
+    queryFn: async () => {
+      if (direction !== 'lht') return [];
+      const { data, error } = await supabase.rpc('get_grouped_lht_logs', {
+        p_selected: selected,
+        p_filter_date: filterDate ? filterDate.toISOString().slice(0, 10) : null
+      });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: direction === 'lht',
+  });
+  if (direction === 'lht') {
+    groupedLHT = groupedLHTData || [];
+    // Use status counts from Supabase procedure
+    if (statusCountsData && Array.isArray(statusCountsData)) {
+      // statusCountsData: [{ message_id, status, count }, ...]
+      // Build statusOptions and statusCountsByMsg
+      const allStatuses = new Set<string>();
+      statusCountsData.forEach((row: any) => {
+        if (row.status) allStatuses.add(row.status.charAt(0).toUpperCase() + row.status.slice(1));
+      });
+      statusOptions = Array.from(allStatuses);
+      statusCountsByMsg = {};
+      statusCountsData.forEach((row: any) => {
+        if (!statusCountsByMsg[row.message_id]) statusCountsByMsg[row.message_id] = {};
+        statusCountsByMsg[row.message_id][row.status.charAt(0).toUpperCase() + row.status.slice(1)] = row.count;
       });
     }
-    if (selected !== 'all') {
-      filteredMessages = filteredMessages.filter((msg: any) => msg.id === selected);
-    }
-    groupedLHT = filteredMessages.map((msg: any) => {
-      const msgLogs = logs.filter((log: any) => log.message_id === msg.id && log.direction === 'outbound');
-      return {
-        message_id: msg.id,
-        message_text: msg.body,
-        sent_at: msg.sent_at,
-        delivered_count: msg.delivered_count || 0,
-        current_active_subscribers: msg.current_active_subscribers || 0,
-        logs: msgLogs,
-      };
-    });
-    // Collect all unique statuses from all logs for these messages
-    const allStatuses = new Set<string>();
-    groupedLHT.forEach((msg: any) => {
-      msg.logs.forEach((log: any) => {
-      if (log.status) allStatuses.add(log.status.toLowerCase());
-      });
-    });
-    statusOptions = Array.from(allStatuses).map(status => status.charAt(0).toUpperCase() + status.slice(1));
-    // For each message, count logs by status
-    groupedLHT.forEach((msg: any) => {
-      statusCountsByMsg[msg.message_id] = {};
-      statusOptions.forEach(status => {
-        statusCountsByMsg[msg.message_id][status] = msg.logs.filter((log: any) => log.status === status).length;
-      });
-    });
   }
 
   // For inbound/outbound, sort filteredLogs by date desc
@@ -518,7 +567,7 @@ export default function Logs() {
                 </SelectTrigger>
                 <SelectContent className="w-full">
                   <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
-                  {dropdownOptions.map((opt, idx) => (
+                  {dropdownOptions.map((opt: { value: string, label: string, date?: string }, idx: number) => (
                     <SelectItem key={idx} value={opt.value} className="w-full truncate" title={opt.label}>
                       <span className="text-sm font-medium text-gray-700">{opt.label}</span>
                     </SelectItem>
@@ -634,8 +683,11 @@ export default function Logs() {
                 </TableHeader>
                 <TableBody>
                   {filteredLogs.map((log: any) => {
+                    console.log('RENDERED TABLE ROW', log);
                     const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
                     const msgText = (log.message_text || '').length > 100 ? `${log.message_text.slice(0, 100)}...` : (log.message_text || '');
+                    // Debug log for has_delivered
+                    console.log('has_delivered:', log.has_delivered, typeof log.has_delivered, log);
                     return (
                       <TableRow key={log.id}>
                         <TableCell
@@ -702,6 +754,7 @@ export default function Logs() {
                               size="sm"
                               variant="outline"
                               onClick={() => retryMessage(log)}
+                              disabled={!!log.has_delivered || retryingId === log.id}
                             >
                               {retryingId === log.id ? 'Retrying...' : 'Retry'}
                             </Button>
@@ -729,6 +782,7 @@ export default function Logs() {
         formatDate={formatDate}
         getCarrier={getCarrier}
         handleExpand={handleExpand}
+        statusCountsByMsg={statusCountsByMsg}
       />
     </div>
   );

@@ -1,4 +1,16 @@
-// Note: We're using Drizzle directly with DATABASE_URL, not the Supabase client
+import { createClient } from '@supabase/supabase-js';
+
+// For client-side usage, use VITE_ env vars (set in .env or build system)
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in environment variables');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);// Note: We're using Drizzle directly with DATABASE_URL, not the Supabase client
+
 // This file exists for any Supabase-specific utilities we might need
 
 export const formatPhoneNumber = (phoneNumber: string | null): string | null => {

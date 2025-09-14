@@ -210,7 +210,7 @@ export class FallbackStorage implements IStorage {
 
   async getMessages(): Promise<Message[]> {
     // Fetch messages from Supabase
-    const { data, error } = await supabase.from('messages').select('*, current_active_subscribers, delivered_count');
+    const { data, error } = await supabase.from('messages').select('*, current_active_subscribers');
     if (error) {
       console.error('Supabase error (getMessages):', error);
       return [];
@@ -231,9 +231,6 @@ export class FallbackStorage implements IStorage {
     //console.log('Active Subscribers Count:', activeCount, 'Error:', activeError);
     const activeCountValue = activeCount || 0;
 
-    // Assume delivered count comes from Telnyx response (placeholder for now)
-    const deliveredCount = message.delivered_count || 0; // Replace with actual Telnyx response logic
-
     //console.log('Inserting message with activeCount:', activeCountValue);
     //console.log('Final Active Subscribers Count:', activeCountValue);
 
@@ -243,8 +240,7 @@ export class FallbackStorage implements IStorage {
         {
           body: message.body,
           sent_at: now,
-          current_active_subscribers: activeCountValue, // Store active subscribers count
-          delivered_count: deliveredCount, // Store delivered count
+          current_active_subscribers: activeCountValue
         },
       ])
       .select('*')

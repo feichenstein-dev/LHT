@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/ui/message-bubble";
@@ -8,9 +9,11 @@ import { apiRequest, handleApiRefresh } from "@/lib/queryClient";
 import { Send, Users } from "lucide-react";
 import type { Message, Subscriber } from "@shared/schema";
 
-type ExtendedMessage = Message & {
-  current_active_subscribers?: number;
-  status: "delivered" | "failed" | "pending" | "unknown";
+
+type StatusCount = {
+  message_id: string;
+  status: string;
+  count: number;
 };
 
 
@@ -48,36 +51,42 @@ export default function Messages() {
     };
   }, [queryClient]);
 
-  // Fetch delivery logs for all messages
-  const { data: deliveryLogs = [] } = useQuery<any[]>({
-    queryKey: ["/api/delivery-logs", { limit: 10000 }],
+
+  // Fetch status counts for all messages using Supabase RPC
+  const { data: statusCountsData = [] } = useQuery<StatusCount[]>({
+    queryKey: ["get_status_counts"],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/delivery-logs?limit=10000");
-      const data = await response.json();
-      return data.logs || [];
+      // Use Supabase client directly (or import from your lib if available)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { data, error } = await supabase.rpc("get_status_counts");
+      if (error) throw error;
+      return data || [];
     },
     staleTime: 60000,
   });
 
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<ExtendedMessage[]>({
+  const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages"],
-    select: (msgs: ExtendedMessage[]) =>
-      msgs
-        .map((msg: ExtendedMessage) => {
-          // Count delivered logs for this message (handle string/number id)
-          const msgIdStr = String(msg.id);
-          const deliveredCount = deliveryLogs.filter(
-            (log) => String(log.message_id) === msgIdStr && typeof log.status === 'string' && log.status.toLowerCase() === "delivered"
-          ).length;
-          return {
-            ...msg,
-            delivered_count: deliveredCount,
-            current_active_subscribers: msg.current_active_subscribers || 0,
-            status: msg.status || "unknown",
-          };
-        })
-        .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime()),
   });
+
+  // Build a map of delivered count and status for each message
+  const deliveredCountByMsg: Record<string, number> = {};
+  const statusByMsg: Record<string, string> = {};
+  if (Array.isArray(statusCountsData)) {
+    // statusCountsData: [{ message_id, status, count }, ...]
+    statusCountsData.forEach((row) => {
+      if (!deliveredCountByMsg[row.message_id]) deliveredCountByMsg[row.message_id] = 0;
+      if (row.status.toLowerCase() === "delivered") {
+        deliveredCountByMsg[row.message_id] = row.count;
+        statusByMsg[row.message_id] = "delivered";
+      } else if (!statusByMsg[row.message_id]) {
+        // Fallback to first status if not delivered
+        statusByMsg[row.message_id] = row.status;
+      }
+    });
+  }
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
     queryKey: ["/api/subscribers"],
@@ -192,42 +201,44 @@ export default function Messages() {
               </div>
             ) : (
               <>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={<span style={{ whiteSpace: 'pre-wrap' }}>{message.body}</span>}
-                    timestamp={
-                      message.sent_at
-                        ? new Date(message.sent_at).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                            hour12: true,
-                          })
-                        : ""
-                    }
-                    deliveryInfo={{
-                      count: message.delivered_count || 0,
-                      status: message.status || "pending",
-                    }}
-                    activeCount={message.current_active_subscribers || 0}
-                    deliveredCount={message.delivered_count || 0}
-                    actions={
-                      message.status === "failed" && (
-                        <Button
-                          onClick={() => handleRetryMessage(message.id)}
-                          size="sm"
-                          variant="outline"
-                          className="ml-2"
-                        >
-                          Retry
-                        </Button>
-                      )
-                    }
-                  />
-                ))}
+                {messages
+                  .sort((a, b) => new Date(a.sent_at || "").getTime() - new Date(b.sent_at || "").getTime())
+                  .map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={<span style={{ whiteSpace: 'pre-wrap' }}>{message.body}</span>}
+                      timestamp={
+                        message.sent_at
+                          ? new Date(message.sent_at).toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                            })
+                          : ""
+                      }
+                      deliveryInfo={{
+                        count: deliveredCountByMsg[message.id] || 0,
+                        status: (statusByMsg[message.id] as "delivered" | "pending" | "failed") || "pending",
+                      }}
+                      activeCount={(message as any).current_active_subscribers || 0}
+                      deliveredCount={deliveredCountByMsg[message.id] || 0}
+                      actions={
+                        statusByMsg[message.id] === "failed" && (
+                          <Button
+                            onClick={() => handleRetryMessage(message.id)}
+                            size="sm"
+                            variant="outline"
+                            className="ml-2"
+                          >
+                            Retry
+                          </Button>
+                        )
+                      }
+                    />
+                  ))}
                 {/* Extra space after last message bubble */}
                 <div className="space-y-4" />
               </>

@@ -268,8 +268,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return sub || { phone_number: num, name: null, id: null };
         }));
       } else {
-        // Default: all active subscribers
-        recipients = await storage.getActiveSubscribers();
+        // Default: all active subscribers (use view for efficiency)
+        const { data: activeSubs, error: activeSubsError } = await storageModule.supabase.from('active_subscribers').select('*');
+        if (activeSubsError) throw activeSubsError;
+        recipients = activeSubs || [];
       }
 
       // Filter out invalid phone numbers before sending
@@ -280,41 +282,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('No valid recipients found');
       }
 
-      const deliveryPromises = recipients.map(async (subscriber) => {
-        const result = await sendMessageAndLog({
-          to: subscriber.phone_number,
-          text: message ? message.body : req.body.body,
-          message_id: messageId,
-          name: subscriber.name ?? null,
-          direction: 'outbound',
-          subscriber_id: subscriber.id ?? null,
-          storage,
-        });
-        if (result.success) {
-          console.log(`[Bulk Send] Success: ${subscriber.phone_number}`);
-        } else {
-          console.log(`[Bulk Send] Failure: ${subscriber.phone_number} | Error: ${result.error}`);
-        }
-        return { success: result.success, subscriber: subscriber.phone_number, error: result.error };
-      });
 
-      const results = await Promise.all(deliveryPromises);
-      const successCount = results.filter((r) => r.success).length;
-      const failedCount = results.filter((r) => !r.success).length;
+      // Batch sending: 10 at a time, 300ms delay between batches
+      const batchSize = 10;
+      const batchDelayMs = 300;
+      const results: { success: boolean; subscriber: string; error: any }[] = [];
 
-      // Only update delivered_count if not a retry and message exists (i.e., bulk send from message page)
-      if (!isRetry && message) {
-        console.log(`Updating delivered_count for message ID ${messageId} with successCount: ${successCount}`);
-        const { error: updateError } = await storageModule.supabase
-          .from('messages')
-          .update({ delivered_count: successCount })
-          .eq('id', messageId);
-        if (updateError) {
-          console.error(`Failed to update delivered_count for message ID ${messageId}:`, updateError);
-        } else {
-          console.log(`Successfully updated delivered_count for message ID ${messageId}`);
+      // Helper: determine if error is retryable (moved outside block for ES5 strict mode)
+      const isRetryableError = (error: any) => {
+        if (!error) return false;
+        // Network/connection errors, timeouts, 5xx, AggregateError, TelnyxConnectionError
+        const msg = typeof error === 'string' ? error : (error.error || error.status || error.message || error);
+        if (!msg) return false;
+        const str = String(msg).toLowerCase();
+        return (
+          str.includes('connection') ||
+          str.includes('timeout') ||
+          str.includes('aggregateerror') ||
+          str.includes('telnyxconnectionerror') ||
+          str.includes('network') ||
+          str.includes('econn') ||
+          (str.includes('5') && str.includes('error')) // crude 5xx check
+        );
+      };
+
+      for (let i = 0; i < recipients.length; i += batchSize) {
+        const batch = recipients.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (subscriber) => {
+            let attempt = 0;
+            let result: { success: boolean; error: any } = { success: false, error: null };
+            while (attempt < 3) {
+              result = await sendMessageAndLog({
+                to: subscriber.phone_number,
+                text: message ? message.body : req.body.body,
+                message_id: messageId,
+                name: subscriber.name ?? null,
+                direction: 'outbound',
+                subscriber_id: subscriber.id ?? null,
+                storage,
+              });
+              if (result.success) {
+                console.log(`[Bulk Send] Success: ${subscriber.phone_number} (attempt ${attempt + 1})`);
+                break;
+              } else {
+                console.log(`[Bulk Send] Failure: ${subscriber.phone_number} | Error: ${result.error} | Attempt ${attempt + 1}`);
+                if (!isRetryableError(result.error)) {
+                  break; // do not retry non-retryable errors
+                }
+                await new Promise((resolve) => setTimeout(resolve, 500)); // 500ms between retries
+              }
+              attempt++;
+            }
+            return { success: !!result.success, subscriber: subscriber.phone_number, error: result.error };
+          })
+        );
+        results.push(...batchResults);
+        if (i + batchSize < recipients.length) {
+          await new Promise((resolve) => setTimeout(resolve, batchDelayMs));
         }
       }
+      const successCount = results.filter((r) => r.success).length;
+      const failedCount = results.filter((r) => !r.success).length;
 
       // Log the total and sent values to the delivery logs database
       await storageModule.supabase
@@ -583,58 +612,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delivery logs endpoints
   app.get("/api/delivery-logs", async (req, res) => {
     try {
-        const { search, status, dateRange, page = "1", limit = "10" } = req.query;
-        const pageNum = parseInt(page as string, 10);
-        const limitNum = parseInt(limit as string, 10);
-        const offset = (pageNum - 1) * limitNum;
+      const { status, dateRange, page = "1", limit = "10" } = req.query;
+      const pageNum = parseInt(page as string, 10);
+      const limitNum = parseInt(limit as string, 10);
+      const offset = (pageNum - 1) * limitNum;
 
-        const { logs, total } = await storage.getDeliveryLogs({
-            search: search as string,
-            status: status as string,
-            dateRange: dateRange as string,
-            limit: limitNum,
-            offset,
-        });
-
-        // Enhance logs to include subscriber name if subscriber_id is missing
-        const enhancedLogs = await Promise.all(
-            (logs ?? []).map(async (log) => {
-                if (!log.subscriber_id && log.phone_number) {
-                    try {
-                        const subscriber = await storage.getSubscriberByPhone(log.phone_number);
-                        if (subscriber) {
-                            log.name = subscriber.name;
-                        }
-                    } catch (error) {
-                        console.error(`Error fetching subscriber for phone number ${log.phone_number}:`, error);
-                    }
-                }
-                return log;
-            })
-        );
-
-        res.json({
-            logs: enhancedLogs,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                total: total ?? 0,
-                totalPages: Math.max(1, Math.ceil((total ?? 0) / limitNum)),
-            },
-        });
+      // Call Supabase RPC for efficient delivery log fetching with subscriber name (no search)
+      const { data, error } = await storageModule.supabase.rpc('get_delivery_logs_with_subscriber', {
+        p_status: status ? String(status) : null,
+        p_date_range: dateRange ? dateRange : null,
+        p_limit: limitNum,
+        p_offset: offset
+      });
+      if (error) {
+        console.error("Error fetching delivery logs via RPC:", error);
+        return res.status(500).json({ message: "Failed to fetch delivery logs" });
+      }
+      // data is an array of logs with total_count on each row
+      const logs = data || [];
+      const total = logs.length > 0 ? logs[0].total_count : 0;
+      res.json({
+        logs,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.max(1, Math.ceil((total ?? 0) / limitNum)),
+        },
+      });
     } catch (error) {
-        console.error("Error fetching delivery logs:", error);
-        res.status(500).json({ message: "Failed to fetch delivery logs" });
-    }
-  });
-
-  app.get("/api/delivery-stats", async (req, res) => {
-    try {
-      const stats = await storage.getDeliveryStats();
-      res.json(stats);
-    } catch (error) {
-      console.error("Error fetching delivery stats:", error);
-      res.status(500).json({ message: "Failed to fetch delivery stats" });
+      console.error("Error fetching delivery logs:", error);
+      res.status(500).json({ message: "Failed to fetch delivery logs" });
     }
   });
 
