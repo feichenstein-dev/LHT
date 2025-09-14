@@ -80,9 +80,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
   // Disable Retry if any log has has_delivered true
   const anyDelivered = sortedLogs.some((log: any) => log.has_delivered);
 
-  // --- Delivered count logic (copied from messages.tsx) ---
-  // Accepts statusCountsData as prop or from context (for now, fallback to details.delivered_count)
-  // Use statusCountsByMsg for delivered count to match the LHT Delivered column
+
   let deliveredCount = 0;
   if (
     details &&
@@ -106,7 +104,11 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
-  <div className="bg-white rounded-2xl shadow-lg p-6 max-w-[1400px] w-[99vw] relative" onClick={e => e.stopPropagation()}>
+  <div
+    className="bg-white rounded-2xl shadow-lg p-6 relative"
+    style={{ width: '1200px', maxWidth: '99vw', minWidth: '800px', height: '80vh', minHeight: '600px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+    onClick={e => e.stopPropagation()}
+  >
         <button className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold" onClick={onClose} aria-label="Close">&times;</button>
         <h3 className="text-lg font-semibold mb-4">Delivery Details</h3>
         <div className="text-sm mb-4">
@@ -142,7 +144,7 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
             ))}
           </select>
         </div>
-        <div style={{ maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto' }}>
+  <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflowY: 'auto', overflowX: 'auto' }}>
           <Table className="w-full">
             <TableHeader>
               <TableRow>
