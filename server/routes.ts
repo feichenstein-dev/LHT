@@ -429,6 +429,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
       let sanitizedName = req.body.name;
       if (typeof sanitizedName === 'string') {
+        // Remove the word 'join' (case-insensitive) from anywhere in the string
+        sanitizedName = sanitizedName.replace(/\bjoin\b/gi, '').trim();
         sanitizedName = sanitizedName.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
         sanitizedName = sanitizedName
           .split(' ')
@@ -828,7 +830,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name = text;
             // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
             if (typeof name === 'string') {
-              name = name.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
+              // Remove the word 'join' (case-insensitive) from anywhere in the string
+              name = name.replace(/\bjoin\b/gi, '').replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '').trim();
               name = name
                 .split(' ')
                 .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
