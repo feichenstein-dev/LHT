@@ -805,8 +805,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('  Telnyx Message ID:', telnyxMessageId);
         console.log('  Carrier:', carrier);
         console.log('  Full payload:', JSON.stringify(data.payload, null, 2));
-  // Match any occurrence of 'join' (case-insensitive, with any characters before/after)
-  const joinMatch = text.match(/join(.*)/i);
         const stopMatch = text.match(/^stop$/i);
         const startMatch = text.match(/^start$/i);
         let name = null;
@@ -826,13 +824,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // JOIN keyword logic
-        if (joinMatch || !subscriber) {
-          if (joinMatch) {
-            name = joinMatch[1].trim();
-            // If user only texted 'JOIN' (no name), use the full original message as name
-            if (name === "") {
-              name = text;
-            }
+        if (!subscriber) {
+            name = text;
             // Sanitize name: strip non-alphanumeric from start/end, keep internal whitespace, and convert to title case
             if (typeof name === 'string') {
               name = name.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '');
@@ -841,15 +834,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                 .join(' ');
             }
-          } else {
-            name = text;
-          }
-          if (name === "") name = null;
-          if (!subscriber) {
+            if (name === "") name = null;
             await storage.createSubscriber({ phone_number: from, name });
             subscriber = await storage.getSubscriberByPhone(from);
-          } else {
-            if (name && name !== subscriber.name) {
+
+            // Log the welcome reply (outbound)
+            if (apiKey && telnyxNumber) {
+              const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
+              console.log('[BACKEND] Sending JOIN reply to', from);
+              try {
+                await sendMessageAndLog({
+                  to: from,
+                  text: replyText,
+                  name: subscriber?.name ?? null,
+                  direction: 'outbound',
+                  storage,
+                });
+              } catch (error) {
+                console.error('[BACKEND] Failed to send JOIN reply:', error);
+              }
+            }              
+        }
+        else {
+            if (text.toLowerCase().includes('join') && name !== subscriber.name) {
               const now = new Date().toISOString();
               await storageModule.supabase
                 .from('subscribers')
@@ -857,34 +864,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .eq('id', subscriber.id);
               subscriber = await storage.getSubscriberByPhone(from);
             }
-            if (subscriber && subscriber.status !== 'active') {
-              const now = new Date().toISOString();
-              await storageModule.supabase
-                .from('subscribers')
-                .update({ status: 'active', updated_at: now })
-                .eq('id', subscriber.id);
-              subscriber = await storage.getSubscriberByPhone(from);
-            }
           }
-          // Log the welcome reply (outbound)
-          if (apiKey && telnyxNumber) {
-            const replyText = `Welcome! You are now subscribed to Sefer Chofetz Chaim Texts. Reply HELP for info or STOP to unsubscribe.`;
-            console.log('[BACKEND] Sending JOIN reply to', from);
-            try {
-              await sendMessageAndLog({
-                to: from,
-                text: replyText,
-                name: subscriber?.name ?? null,
-                direction: 'outbound',
-                storage,
-              });
-            } catch (error) {
-              console.error('[BACKEND] Failed to send JOIN reply:', error);
-            }
-          }
-        }
         // START keyword logic (unblock and send welcome)
-        else if (startMatch) {
+        if (startMatch) {
           // Unblock the subscriber in DB
           await storage.unblockSubscriber(from);
           // Send welcome message
