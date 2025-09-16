@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { createClient } from "@supabase/supabase-js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,7 @@ interface SubscribersModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) {
+export const SubscribersModal = ({ open, onOpenChange }: SubscribersModalProps) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [subscriberName, setSubscriberName] = useState("");
   const [editingSubscriber, setEditingSubscriber] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
   });
 
   // Combine all loaded pages
-  const subscribers: SubscriberRow[] = infiniteData ? infiniteData.pages.flat() : [];
+  const subscribers: SubscriberRow[] = infiniteData ? (infiniteData.pages.flat() as SubscriberRow[]) : [];
 
   // Fetch dynamic status breakdown from Supabase RPC
   const { data: statusCounts = [] } = useQuery<any[]>({
@@ -115,7 +115,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: (data) => {
       handleApiRefresh(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["get_filtered_subscribers"] });
       setPhoneNumber("");
       setSubscriberName("");
     },
@@ -127,7 +127,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: (data) => {
       handleApiRefresh(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["get_filtered_subscribers"] });
     },
   });
 
@@ -139,7 +139,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: (data) => {
       handleApiRefresh(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["get_filtered_subscribers"] });
     },
   });
 
@@ -150,7 +150,7 @@ export function SubscribersModal({ open, onOpenChange }: SubscribersModalProps) 
     },
     onSuccess: (data) => {
       handleApiRefresh(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["get_filtered_subscribers"] });
       setEditingSubscriber(null);
       setEditingName("");
     },
