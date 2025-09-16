@@ -92,6 +92,10 @@ export default function Messages() {
     queryKey: ["/api/subscribers"],
   });
 
+  const { refetch: refetchMessages } = useQuery<Message[]>({
+    queryKey: ["/api/messages"],
+  });
+
   const sendMessageMutation = useMutation({
     mutationFn: async (body: string) => {
       // Send IsLHMessage: true to backend for LHT message creation
@@ -100,8 +104,8 @@ export default function Messages() {
     },
     onSuccess: async (data) => {
       handleApiRefresh(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-logs"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      await refetchMessages();
       setMessageText("");
       logMessageStatus(data.id, "Success", data);
       // Scroll to bottom after sending a message
