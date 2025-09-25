@@ -605,7 +605,18 @@ export default function Logs() {
                 </SelectTrigger>
                 <SelectContent className="w-full">
                   <SelectItem value="all" className="w-full">All {direction === 'lht' ? 'Messages' : 'Subscribers'}</SelectItem>
-                  {dropdownOptions.map((opt: { value: string, label: string, date?: string }, idx: number) => (
+                  {(direction === 'lht'
+                    ? [...dropdownOptions].sort((a, b) => {
+                        // Sort by date descending (most recent first)
+                        const dateA = a.date ? new Date(a.date).getTime() : 0;
+                        const dateB = b.date ? new Date(b.date).getTime() : 0;
+                        return dateB - dateA;
+                      })
+                    : [...dropdownOptions].sort((a, b) => {
+                        // Sort alphabetically by label (case-insensitive)
+                        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+                      })
+                  ).map((opt: { value: string, label: string, date?: string }, idx: number) => (
                     <SelectItem key={idx} value={opt.value} className="w-full truncate" title={opt.label}>
                       <span className="text-sm font-medium text-gray-700">{opt.label}</span>
                     </SelectItem>
