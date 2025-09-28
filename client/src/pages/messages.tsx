@@ -108,7 +108,7 @@ export default function Messages() {
       await refetchMessages();
       setMessageText("");
       logMessageStatus(data.id, "Success", data);
-      // Scroll to bottom after sending a message
+      // Force a full page refresh to ensure UI updates and scroll to bottom
       setTimeout(() => {
         if (chatContainerRef.current) {
           chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
