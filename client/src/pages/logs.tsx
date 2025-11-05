@@ -58,10 +58,16 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
     // Search filter
     if (!search.trim()) return true;
     // Always match subscriber by phone number
+    // More robust phone number matching: trim, remove non-digits, compare last 10 digits
+    const normalizePhone = (num: string) => {
+      if (!num) return '';
+      const digits = num.trim().replace(/\D/g, '');
+      // Use last 10 digits for US numbers
+      return digits.length > 10 ? digits.slice(-10) : digits;
+    };
+    const logPhone = normalizePhone(log.phone_number || '');
     const sub = subscribersData?.find((s: any) => {
-      // Normalize phone numbers for comparison
-      const logPhone = (log.phone_number || '').replace(/\D/g, '');
-      const subPhone = (s.phone_number || '').replace(/\D/g, '');
+      const subPhone = normalizePhone(s.phone_number || '');
       return logPhone && subPhone && logPhone === subPhone;
     });
     const name = (sub?.name || log.name || '').toLowerCase();
@@ -72,14 +78,19 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
   // Order by name (case-insensitive), then sent at (updated_at) ascending
   const sortedLogs = [...filteredLogs].sort((a: any, b: any) => {
     // Always match subscriber by phone number
+    const normalizePhone = (num: string) => {
+      if (!num) return '';
+      const digits = num.trim().replace(/\D/g, '');
+      return digits.length > 10 ? digits.slice(-10) : digits;
+    };
+    const aPhone = normalizePhone(a.phone_number || '');
+    const bPhone = normalizePhone(b.phone_number || '');
     const subA = subscribersData?.find((s: any) => {
-      const aPhone = (a.phone_number || '').replace(/\D/g, '');
-      const sPhone = (s.phone_number || '').replace(/\D/g, '');
+      const sPhone = normalizePhone(s.phone_number || '');
       return aPhone && sPhone && aPhone === sPhone;
     });
     const subB = subscribersData?.find((s: any) => {
-      const bPhone = (b.phone_number || '').replace(/\D/g, '');
-      const sPhone = (s.phone_number || '').replace(/\D/g, '');
+      const sPhone = normalizePhone(s.phone_number || '');
       return bPhone && sPhone && bPhone === sPhone;
     });
     const nameA = (subA?.name || a.name || '').trim().toLowerCase();
@@ -758,10 +769,15 @@ export default function Logs() {
                 <TableBody>
                   {filteredLogs.map((log: any) => {
                     console.log('RENDERED TABLE ROW', log);
-                    // Always match subscriber by phone number
+                    // More robust phone number matching: trim, remove non-digits, compare last 10 digits
+                    const normalizePhone = (num: string) => {
+                      if (!num) return '';
+                      const digits = num.trim().replace(/\D/g, '');
+                      return digits.length > 10 ? digits.slice(-10) : digits;
+                    };
+                    const logPhone = normalizePhone(log.phone_number || '');
                     const sub = subscribersData?.find((s: any) => {
-                      const logPhone = (log.phone_number || '').replace(/\D/g, '');
-                      const subPhone = (s.phone_number || '').replace(/\D/g, '');
+                      const subPhone = normalizePhone(s.phone_number || '');
                       return logPhone && subPhone && logPhone === subPhone;
                     });
                     const msgText = (log.message_text || '').length > 100 ? `${log.message_text.slice(0, 100)}...` : (log.message_text || '');
