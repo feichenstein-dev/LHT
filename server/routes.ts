@@ -858,16 +858,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }              
         }
-        else {
-            if (text.toLowerCase().includes('join') && name !== subscriber.name) {
-              const now = new Date().toISOString();
-              await storageModule.supabase
-                .from('subscribers')
-                .update({ name, updated_at: now })
-                .eq('id', subscriber.id);
-              subscriber = await storage.getSubscriberByPhone(from);
+          else {
+              // Only update name if message contains 'join' AND sanitized name is not empty AND name is different
+              let sanitizedName = text;
+              if (typeof sanitizedName === 'string') {
+                sanitizedName = sanitizedName.replace(/\bjoin\b/gi, '').replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '').trim();
+                sanitizedName = sanitizedName
+                  .split(' ')
+                  .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                  .join(' ');
+              }
+              if (
+                text.toLowerCase().includes('join') &&
+                sanitizedName !== '' &&
+                sanitizedName !== subscriber.name
+              ) {
+                const now = new Date().toISOString();
+                await storageModule.supabase
+                  .from('subscribers')
+                  .update({ name: sanitizedName, updated_at: now })
+                  .eq('id', subscriber.id);
+                subscriber = await storage.getSubscriberByPhone(from);
+              }
             }
-          }
         // START keyword logic (unblock and send welcome)
         if (startMatch) {
           // Unblock the subscriber in DB
