@@ -57,7 +57,13 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
     }
     // Search filter
     if (!search.trim()) return true;
-    const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+    // Always match subscriber by phone number
+    const sub = subscribersData?.find((s: any) => {
+      // Normalize phone numbers for comparison
+      const logPhone = (log.phone_number || '').replace(/\D/g, '');
+      const subPhone = (s.phone_number || '').replace(/\D/g, '');
+      return logPhone && subPhone && logPhone === subPhone;
+    });
     const name = (sub?.name || log.name || '').toLowerCase();
     const phone = (sub?.phone_number || log.phone_number || '').toLowerCase();
     const searchVal = search.toLowerCase();
@@ -65,10 +71,30 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
   });
   // Order by name (case-insensitive), then sent at (updated_at) ascending
   const sortedLogs = [...filteredLogs].sort((a: any, b: any) => {
-    const subA = subscribersData?.find((s: any) => s.id === a.subscriber_id);
-    const subB = subscribersData?.find((s: any) => s.id === b.subscriber_id);
-    const nameA = (subA?.name || a.name || '').toLowerCase();
-    const nameB = (subB?.name || b.name || '').toLowerCase();
+    // Always match subscriber by phone number
+    const subA = subscribersData?.find((s: any) => {
+      const aPhone = (a.phone_number || '').replace(/\D/g, '');
+      const sPhone = (s.phone_number || '').replace(/\D/g, '');
+      return aPhone && sPhone && aPhone === sPhone;
+    });
+    const subB = subscribersData?.find((s: any) => {
+      const bPhone = (b.phone_number || '').replace(/\D/g, '');
+      const sPhone = (s.phone_number || '').replace(/\D/g, '');
+      return bPhone && sPhone && bPhone === sPhone;
+    });
+    const nameA = (subA?.name || a.name || '').trim().toLowerCase();
+    const nameB = (subB?.name || b.name || '').trim().toLowerCase();
+    // If both names are blank, keep order by sent time
+    if (!nameA && !nameB) {
+      const timeA = new Date(a.updated_at).getTime();
+      const timeB = new Date(b.updated_at).getTime();
+      return timeA - timeB;
+    }
+    // If only A is blank, A goes after B
+    if (!nameA) return 1;
+    // If only B is blank, B goes after A
+    if (!nameB) return -1;
+    // Otherwise, sort by name
     if (nameA < nameB) return -1;
     if (nameA > nameB) return 1;
     // If names are equal, sort by sent time ascending
@@ -199,10 +225,10 @@ function DetailsModal({ isOpen, onClose, details, subscribersData, statusOptions
                     <TableCell
                       className="font-normal log-cell-ellipsis"
                       style={{ width: 'auto', maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
-                      onClick={() => handleExpand(sub?.name || log.name || 'N/A', 'Name')}
-                      title={sub?.name || log.name || 'N/A'}
+                      onClick={() => handleExpand(sub?.name || log.name || '', 'Name')}
+                      title={sub?.name || log.name || ''}
                     >
-                      {sub?.name || log.name || 'N/A'}
+                      {(sub?.name || log.name || '').trim()}
                     </TableCell>
                     <TableCell
                       className="font-normal log-cell-ellipsis"
@@ -732,7 +758,12 @@ export default function Logs() {
                 <TableBody>
                   {filteredLogs.map((log: any) => {
                     console.log('RENDERED TABLE ROW', log);
-                    const sub = subscribersData?.find((s: any) => s.id === log.subscriber_id);
+                    // Always match subscriber by phone number
+                    const sub = subscribersData?.find((s: any) => {
+                      const logPhone = (log.phone_number || '').replace(/\D/g, '');
+                      const subPhone = (s.phone_number || '').replace(/\D/g, '');
+                      return logPhone && subPhone && logPhone === subPhone;
+                    });
                     const msgText = (log.message_text || '').length > 100 ? `${log.message_text.slice(0, 100)}...` : (log.message_text || '');
                     // Debug log for has_delivered
                     console.log('has_delivered:', log.has_delivered, typeof log.has_delivered, log);
