@@ -225,10 +225,14 @@ export const SubscribersModal = ({ open, onOpenChange }: SubscribersModalProps) 
 
   const formatJoinDate = (joinedAt: string) => {
     const date = new Date(joinedAt);
-    return date.toLocaleDateString('en-US', {
+    // Format: Nov 5, 2025, 10:03 PM
+    return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
     });
   };
 
