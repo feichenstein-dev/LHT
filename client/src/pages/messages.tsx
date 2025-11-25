@@ -276,20 +276,22 @@ export default function Messages() {
 
       {/* Confirm Send Modal */}
       <Dialog open={confirmModalOpen} onOpenChange={setConfirmModalOpen}>
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
-          <div className="bg-white dark:bg-background rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <div className="mb-4 text-lg font-semibold">Send Message?</div>
-            <div className="mb-4 text-muted-foreground whitespace-pre-wrap break-words">{messageText}</div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending}>
-                Send
-              </Button>
+        {confirmModalOpen && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
+            <div className="bg-white dark:bg-background rounded-lg shadow-lg p-6 max-w-sm w-full">
+              <div className="mb-4 text-lg font-semibold">Send Message?</div>
+              <div className="mb-4 text-muted-foreground whitespace-pre-wrap break-words">{messageText}</div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending}>
+                  Send
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </Dialog>
 
       {/* Floating Manage Subscribers Button */}
