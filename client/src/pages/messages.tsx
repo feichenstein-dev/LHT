@@ -119,6 +119,10 @@ export default function Messages() {
     }
     sendMessageMutation.mutate(messageText);
     setConfirmModalOpen(false);
+    // Force a full window refresh immediately after pressing Send
+    setTimeout(() => {
+      window.location.reload();
+    }, 0);
   }, [messageText, subscribers, sendMessageMutation]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -278,7 +282,19 @@ export default function Messages() {
       <Dialog open={confirmModalOpen} onOpenChange={setConfirmModalOpen}>
         {confirmModalOpen && (
           <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
-            <div className="bg-white dark:bg-background rounded-lg shadow-lg p-6 max-w-sm w-full">
+            <div
+              className="bg-white dark:bg-background rounded-lg shadow-lg p-6"
+              style={{
+                maxWidth: '90vw',
+                width: 900,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                touchAction: 'manipulation',
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
               <div className="mb-4 text-lg font-semibold">Send Message?</div>
               <div className="mb-4 text-muted-foreground whitespace-pre-wrap break-words">{messageText}</div>
               <div className="flex justify-end space-x-2">
