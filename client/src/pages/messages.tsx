@@ -26,6 +26,7 @@ export default function Messages() {
   const [messageText, setMessageText] = useState("");
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -93,6 +94,7 @@ export default function Messages() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (body: string) => {
+      setSendingMessage(true);
       const response = await apiRequest("POST", "/api/messages", { body, IsLHMessage: true });
       return response.json();
     },
@@ -102,13 +104,14 @@ export default function Messages() {
       await refetchMessages();
       setMessageText("");
       logMessageStatus(data.id, "Success", data);
-      // Force a full window refresh to ensure UI updates and scroll to bottom
-      setTimeout(() => {
-        window.location.reload();
-      }, 0);
+      setSendingMessage(false);
+      setConfirmModalOpen(false);
+      // Refresh the page after the message is successfully sent
+      window.location.reload();
     },
     onError: (error: any) => {
       logMessageStatus(null, "Error", error);
+      setSendingMessage(false);
     },
   });
 
@@ -118,11 +121,7 @@ export default function Messages() {
       return;
     }
     sendMessageMutation.mutate(messageText);
-    setConfirmModalOpen(false);
-    // Force a full window refresh immediately after pressing Send
-    setTimeout(() => {
-      window.location.reload();
-    }, 0);
+    // Modal will close automatically on success
   }, [messageText, subscribers, sendMessageMutation]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -295,15 +294,23 @@ export default function Messages() {
                 WebkitOverflowScrolling: 'touch',
               }}
             >
-              <div className="mb-4 text-lg font-semibold">Send Message?</div>
+              <div className="mb-4 text-lg font-semibold">{sendingMessage ? "Sending Message..." : "Send Message?"}</div>
               <div className="mb-4 text-muted-foreground whitespace-pre-wrap break-words">{messageText}</div>
               <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending}>
-                  Send
-                </Button>
+                {sendingMessage ? (
+                  <Button disabled variant="outline">
+                    Sending Message...
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending}>
+                      Send
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
