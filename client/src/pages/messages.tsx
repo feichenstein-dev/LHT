@@ -27,6 +27,7 @@ export default function Messages() {
   const [subscribersModalOpen, setSubscribersModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [pin, setPin] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -50,7 +51,6 @@ export default function Messages() {
       window.removeEventListener("lht-autorefresh", refresh);
     };
   }, [queryClient]);
-
 
   // Fetch status counts for all messages using Supabase RPC
   const { data: statusCountsData = [] } = useQuery<StatusCount[]>({
@@ -120,9 +120,10 @@ export default function Messages() {
     if (subscribers.length === 0) {
       return;
     }
+    if (pin !== "6255") return;
     sendMessageMutation.mutate(messageText);
     // Modal will close automatically on success
-  }, [messageText, subscribers, sendMessageMutation]);
+  }, [messageText, subscribers, sendMessageMutation, pin]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageText(e.target.value);
@@ -296,6 +297,20 @@ export default function Messages() {
             >
               <div className="mb-4 text-lg font-semibold">{sendingMessage ? "Sending Message..." : "Send Message?"}</div>
               <div className="mb-4 text-muted-foreground whitespace-pre-wrap break-words">{messageText}</div>
+              {!sendingMessage && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1" htmlFor="pin-input">Enter PIN to send:</label>
+                  <input
+                    id="pin-input"
+                    type="password"
+                    value={pin}
+                    onChange={e => setPin(e.target.value)}
+                    className="border rounded px-3 py-2 w-32 text-center text-lg"
+                    maxLength={4}
+                    autoFocus
+                  />
+                </div>
+              )}
               <div className="flex justify-end space-x-2">
                 {sendingMessage ? (
                   <Button disabled variant="outline">
@@ -303,10 +318,14 @@ export default function Messages() {
                   </Button>
                 ) : (
                   <>
-                    <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
+                    <Button variant="outline" onClick={() => { setConfirmModalOpen(false); setPin(""); }}>
                       Cancel
                     </Button>
-                    <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending}>
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={sendMessageMutation.isPending || pin !== "6255"}
+                      style={{ backgroundColor: pin === "6255" ? "#2563eb" : undefined, color: pin === "6255" ? "#fff" : undefined }}
+                    >
                       Send
                     </Button>
                   </>
